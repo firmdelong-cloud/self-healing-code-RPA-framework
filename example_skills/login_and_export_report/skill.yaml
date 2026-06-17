@@ -1,0 +1,68 @@
+id: login_and_export_report
+name: Login And Export Report
+version: 0.1.0
+description: Log in to a local report fixture, select a date range, export a report, and verify success.
+entrypoint: main.py
+selectors: selectors.yaml
+repair_policy: repair_policy.yaml
+inputs:
+  username:
+    type: string
+    default: demo_user
+  password:
+    type: string
+    default: demo_password
+outputs:
+  export_status:
+    type: string
+steps:
+  - id: open_login_page
+    type: goto
+    goal: Open the local report login page.
+    url: "{{REPORT_DEMO_URL}}"
+
+  - id: fill_username
+    type: fill
+    goal: Fill the username input.
+    selector_ref: username_input
+    value: demo_user
+
+  - id: fill_password
+    type: fill
+    goal: Fill the password input.
+    selector_ref: password_input
+    value: demo_password
+
+  - id: submit_login
+    type: click
+    goal: Submit the login form.
+    selector_ref: login_submit_button
+
+  - id: enter_report_page
+    type: click
+    goal: Enter the report page from the dashboard.
+    selector_ref: report_page_link
+
+  - id: fill_start_date
+    type: fill
+    goal: Fill the report start date.
+    selector_ref: date_start_input
+    value: "2026-06-01"
+
+  - id: fill_end_date
+    type: fill
+    goal: Fill the report end date.
+    selector_ref: date_end_input
+    value: "2026-06-17"
+
+  - id: click_export
+    type: click
+    goal: Click the export button to generate the report.
+    selector_ref: export_button
+
+  - id: verify_export_success
+    type: assert_text
+    goal: Confirm that the export finished successfully.
+    selector_ref: export_success_message
+    expected_text: Export ready
+    target_description: Success message shown after export is generated.

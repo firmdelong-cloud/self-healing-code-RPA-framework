@@ -4,8 +4,9 @@ retry:
 repair_scope:
   scope_type: selector_only
   allowed_files:
-    - selectors.yaml
-  allowed_selector_refs: []
+    - example_skills/{skill_id}/selectors.yaml
+  allowed_selector_refs:
+    - submit_button
   must_not_touch_other_steps: true
   must_not_touch_runtime: true
 sandbox:
@@ -14,3 +15,4 @@ sandbox:
     - python
     - -m
     - pytest
+    - example_skills/{skill_id}/tests/test_skill.py

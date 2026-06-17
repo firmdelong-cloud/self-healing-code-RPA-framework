@@ -92,6 +92,28 @@ def test_cli_repair_sandbox_runs_valid_patch(tmp_path, capsys):
     assert "patched_skill_path" in payload
 
 
+def test_cli_doctor(capsys):
+    exit_code = main(["--project-root", str(PROJECT_ROOT), "doctor"])
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert exit_code == 0
+    assert payload["status"] == "ok"
+    assert any(check["name"] == "registry loads" for check in payload["checks"])
+
+
+def test_cli_demo_repair(capsys):
+    exit_code = main(["--project-root", str(PROJECT_ROOT), "demo", "repair"])
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert exit_code == 0
+    assert payload["success"] is True
+    assert payload["failed_step_id"] == "click_export"
+    assert payload["sandbox_success"] is True
+    assert payload["rerun_status"] == "success"
+
+
 def test_repo_skill_files_exist():
     skill_root = PROJECT_ROOT / ".agents" / "skills" / "self-healing-rpa-engineer"
 
@@ -118,7 +140,10 @@ def test_readme_contains_key_sections():
         "Run Demo",
         "Run Tests",
         "CLI Usage",
+        "python -m code_rpa doctor",
+        "python -m code_rpa demo repair",
         "Create a New Skill",
+        "docs/skill-contract.md",
         "Repair Pipeline",
         "Rollback",
         "Codex Repo Skill",
@@ -130,6 +155,16 @@ def test_readme_contains_key_sections():
     ]
     for phrase in required_phrases:
         assert phrase in readme
+
+
+def test_skill_contract_doc_exists():
+    contract = PROJECT_ROOT / "docs" / "skill-contract.md"
+
+    assert contract.exists()
+    content = contract.read_text(encoding="utf-8")
+    assert "skill.yaml Required Fields" in content
+    assert "outputs Format" in content
+    assert "Repair Scope Rules" in content
 
 
 def write_repair_files(tmp_path: Path) -> tuple[Path, Path]:

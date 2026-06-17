@@ -12,7 +12,7 @@ Use this skill when working inside this repository on RPA Skills or selector-lev
 - Normal Skill execution must not call an LLM.
 - Web RPA runs through Python + Playwright and YAML Skill definitions.
 - On failure, the runtime must retry and try fallback selectors before generating `repair_request.json`.
-- Phase three repair is selector-only.
+- Current automated repair is selector-only.
 - `patch.json` may use only `selector_update` or `fallback_selector_add`.
 - `code_changes` must be `null`.
 - Patches must pass `PatchValidator`.
@@ -58,4 +58,3 @@ Forbidden repair targets:
 - `skill_registry/`
 - unrelated steps
 - high-risk steps
-

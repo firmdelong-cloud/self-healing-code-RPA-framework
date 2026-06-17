@@ -21,12 +21,14 @@ storage/runs/*
 storage/snapshots/*
 storage/repair_requests/*
 storage/versions/*
+storage/outputs/*
 
 # Keep storage folders
 !storage/runs/.gitkeep
 !storage/snapshots/.gitkeep
 !storage/repair_requests/.gitkeep
 !storage/versions/.gitkeep
+!storage/outputs/.gitkeep
 
 # Env / secrets
 .env
@@ -42,4 +44,3 @@ Thumbs.db
 # Logs
 *.log
 *.jsonl
-

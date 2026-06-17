@@ -1,0 +1,38 @@
+id: scrape_table_to_csv
+name: Scrape Table To CSV
+version: 0.1.0
+description: Open a local table fixture, extract rows, save them as CSV, and expose structured outputs.
+entrypoint: main.py
+selectors: selectors.yaml
+repair_policy: repair_policy.yaml
+inputs: {}
+outputs:
+  table_rows:
+    type: integer
+  csv_path:
+    type: string
+steps:
+  - id: open_table_page
+    type: goto
+    goal: Open the local table demo page.
+    url: "{{TABLE_DEMO_URL}}"
+
+  - id: wait_for_orders_table
+    type: wait_for
+    goal: Wait until the orders table is visible.
+    selector_ref: orders_table
+
+  - id: extract_orders_table
+    type: extract_table
+    goal: Extract orders table rows and write them to CSV.
+    selector_ref: orders_table
+    output_key: table_data
+    row_count_output_key: table_rows
+    output_path: orders.csv
+    output_path_key: csv_path
+    has_header: true
+
+  - id: verify_csv_created
+    type: assert_file_exists
+    goal: Confirm that the CSV output file exists.
+    path_from_output: csv_path

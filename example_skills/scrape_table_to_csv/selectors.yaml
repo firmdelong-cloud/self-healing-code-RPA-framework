@@ -1,0 +1,5 @@
+orders_table:
+  primary: "#orders-table"
+  fallbacks:
+    - "[data-testid='orders-table']"
+    - "table"

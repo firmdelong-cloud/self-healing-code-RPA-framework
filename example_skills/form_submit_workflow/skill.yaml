@@ -1,0 +1,53 @@
+id: form_submit_workflow
+name: Form Submit Workflow
+version: 0.1.0
+description: Fill a local form fixture, submit it, and verify the success message.
+entrypoint: main.py
+selectors: selectors.yaml
+repair_policy: repair_policy.yaml
+inputs:
+  name:
+    type: string
+    default: Ada Lovelace
+  phone:
+    type: string
+    default: "13800000000"
+  notes:
+    type: string
+    default: Follow up next week.
+outputs: {}
+steps:
+  - id: open_form_page
+    type: goto
+    goal: Open the local form demo page.
+    url: "{{FORM_DEMO_URL}}"
+
+  - id: fill_name
+    type: fill
+    goal: Fill the customer name field.
+    selector_ref: customer_name_input
+    value: Ada Lovelace
+
+  - id: fill_phone
+    type: fill
+    goal: Fill the customer phone field.
+    selector_ref: customer_phone_input
+    value: "13800000000"
+
+  - id: fill_notes
+    type: fill
+    goal: Fill the customer notes field.
+    selector_ref: customer_notes_input
+    value: Follow up next week.
+
+  - id: submit_form
+    type: click
+    goal: Submit the form.
+    selector_ref: submit_button
+    target_description: Local form submit button.
+
+  - id: verify_submit_success
+    type: assert_text
+    goal: Confirm that the form submission succeeded.
+    selector_ref: submit_success_message
+    expected_text: Submission received

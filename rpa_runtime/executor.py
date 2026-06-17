@@ -21,12 +21,14 @@ class RunResult:
     skill_id: str
     status: str
     steps: list[StepResult]
+    outputs: dict[str, Any] | None = None
     failure_snapshot: FailureSnapshot | None = None
     repair_request_path: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data["steps"] = [step.to_dict() for step in self.steps]
+        data["outputs"] = self.outputs or {}
         return data
 
 
@@ -58,12 +60,20 @@ class RPAExecutor:
         retry_policy = RetryPolicy.from_dict(skill.repair_policy.get("retry", {}))
         runner = StepRunner(SelectorResolver(skill.selectors), retry_policy)
         results: list[StepResult] = []
+        outputs: dict[str, Any] = {}
         logger.write("run_started", {"skill_id": skill.id, "skill_version": skill.version})
 
         try:
             for step in skill.steps:
                 logger.write("step_started", {"step": step})
-                result = runner.run(page, step, confirmed=step["id"] in self.confirmed_steps)
+                result = runner.run(
+                    page,
+                    step,
+                    confirmed=step["id"] in self.confirmed_steps,
+                    outputs=outputs,
+                    storage_root=self.storage_root,
+                    run_id=run_id,
+                )
                 results.append(result)
                 logger.write("step_finished", result.to_dict())
 
@@ -96,13 +106,13 @@ class RPAExecutor:
                         skill_id=skill.id,
                         status="failed",
                         steps=results,
+                        outputs=outputs,
                         failure_snapshot=snapshot,
                         repair_request_path=repair_request_path,
                     )
 
-            logger.write("run_succeeded", {"step_count": len(results)})
-            return RunResult(run_id=run_id, skill_id=skill.id, status="success", steps=results)
+            logger.write("run_succeeded", {"step_count": len(results), "outputs": outputs})
+            return RunResult(run_id=run_id, skill_id=skill.id, status="success", steps=results, outputs=outputs)
         finally:
             if own_session:
                 own_session.close()
-

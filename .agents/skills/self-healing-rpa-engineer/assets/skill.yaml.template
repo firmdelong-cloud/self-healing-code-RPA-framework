@@ -8,6 +8,6 @@ repair_policy: repair_policy.yaml
 inputs: {{}}
 steps:
   - id: open_page
-    type: navigate
+    type: goto
     goal: Open the starting page for this Skill.
     url: "about:blank"

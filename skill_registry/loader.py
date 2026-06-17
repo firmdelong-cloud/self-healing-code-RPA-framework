@@ -20,6 +20,9 @@ class SkillDefinition:
     entrypoint: str
     selectors_path: Path
     repair_policy_path: Path
+    description: str
+    inputs: dict[str, Any]
+    output_schema: dict[str, Any]
     selectors: dict[str, Any]
     repair_policy: dict[str, Any]
     steps: list[dict[str, Any]]
@@ -54,6 +57,9 @@ class SkillLoader:
             entrypoint=raw["entrypoint"],
             selectors_path=selectors_path,
             repair_policy_path=repair_policy_path,
+            description=str(raw.get("description", "")),
+            inputs=raw.get("inputs", {}) or {},
+            output_schema=raw.get("outputs", {}) or {},
             selectors=selectors,
             repair_policy=repair_policy,
             steps=raw["steps"],
@@ -68,4 +74,3 @@ class SkillLoader:
         if not isinstance(data, dict):
             raise SkillLoadError(f"YAML root must be a mapping: {path}")
         return data
-

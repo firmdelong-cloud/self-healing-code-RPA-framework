@@ -1,0 +1,13 @@
+retry:
+  max_attempts: 1
+  delay_seconds: 0
+repair_scope:
+  scope_type: selector_only
+  must_not_touch_runtime: true
+sandbox:
+  required: true
+  command:
+    - python
+    - -m
+    - pytest
+    - example_skills/scrape_table_to_csv/tests/test_skill.py

@@ -19,6 +19,7 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 python -m playwright install chromium
+python -m code_rpa doctor
 python -m code_rpa skill list
 python -m code_rpa skill run web_report_export
 python -m pytest
@@ -46,6 +47,8 @@ The MVP is intentionally narrow:
 - Web RPA with Playwright.
 - `skill.yaml` workflow definitions.
 - `selectors.yaml` primary and fallback selectors.
+- Generic Web steps: `goto`, `click`, `fill`, `select`, `wait_for`, `extract_text`, `extract_table`, `download_file`, `assert_text`, `assert_url`, and `screenshot`.
+- Structured Skill outputs through `RunResult.outputs`.
 - Failure screenshots and DOM snapshots.
 - Selector-only repair patches.
 - Sandbox-tested version updates.
@@ -76,6 +79,12 @@ You can also run the Skill entrypoint directly:
 python example_skills\web_report_export\main.py
 ```
 
+Additional example Skills:
+
+- `login_and_export_report`: generic step version of the login/export workflow.
+- `scrape_table_to_csv`: extracts a local HTML table, saves CSV output, and returns `table_rows` plus `csv_path`.
+- `form_submit_workflow`: fills a local form fixture, submits it, and verifies success text.
+
 ## Run Tests
 
 ```powershell
@@ -105,7 +114,13 @@ python -m code_rpa repair validate path\to\repair_request.json path\to\patch.jso
 python -m code_rpa repair sandbox path\to\repair_request.json path\to\patch.json
 python -m code_rpa version list web_report_export
 python -m code_rpa version rollback web_report_export <version_id>
+python -m code_rpa doctor
+python -m code_rpa demo repair
 ```
+
+`doctor` prints structured checks for Python, Playwright, pytest, project directories, and Skill registry loading.
+
+`demo repair` runs a local selector repair demonstration in a temporary project copy: it forces a selector failure, generates a repair request, applies a mock selector patch in the sandbox, creates a new version, and reruns the Skill.
 
 ## Repair Pipeline
 
@@ -216,6 +231,8 @@ Then edit:
 - `selectors.yaml` for primary and fallback selectors.
 - `repair_policy.yaml` for retry and sandbox policy.
 - `tests/test_skill.py` for Skill-level pytest coverage.
+
+The formal Skill contract is documented in `docs/skill-contract.md`.
 
 ## Codex Repo Skill
 

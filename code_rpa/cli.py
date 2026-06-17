@@ -3,17 +3,24 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import importlib.util
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import sys
+import tempfile
 from typing import Any
 
 from repair_agent.patch_validator import PatchValidator
 from repair_agent.sandbox_runner import SandboxRunner
+from rpa_runtime.executor import RPAExecutor
 from skill_registry.registry import SkillRegistry
+from skill_registry.loader import SkillLoader
 from skill_registry.version_manager import VersionManager
+
+import yaml
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -27,6 +34,10 @@ def main(argv: list[str] | None = None) -> int:
         return handle_repair(args, project_root)
     if args.group == "version":
         return handle_version(args, project_root)
+    if args.group == "doctor":
+        return handle_doctor(project_root)
+    if args.group == "demo":
+        return handle_demo(args, project_root)
 
     parser.print_help()
     return 1
@@ -63,6 +74,12 @@ def build_parser() -> argparse.ArgumentParser:
     version_rollback = version_sub.add_parser("rollback")
     version_rollback.add_argument("skill_id")
     version_rollback.add_argument("version_id")
+
+    subparsers.add_parser("doctor")
+
+    demo_parser = subparsers.add_parser("demo")
+    demo_sub = demo_parser.add_subparsers(dest="action")
+    demo_sub.add_parser("repair")
 
     return parser
 
@@ -164,6 +181,98 @@ def handle_version(args: argparse.Namespace, project_root: Path) -> int:
         return 0
 
     return 1
+
+
+def handle_doctor(project_root: Path) -> int:
+    checks = [
+        check_python_version(),
+        check_project_root(project_root),
+        check_import("playwright", "Playwright import"),
+        check_import("pytest", "pytest import"),
+        check_path(project_root / "example_skills", "example_skills exists"),
+        check_path(project_root / "storage", "storage exists"),
+        check_registry(project_root),
+    ]
+    payload = {
+        "status": "ok" if all(check["ok"] for check in checks) else "failed",
+        "project_root": str(project_root),
+        "checks": checks,
+    }
+    print(json.dumps(payload, indent=2))
+    return 0 if payload["status"] == "ok" else 1
+
+
+def handle_demo(args: argparse.Namespace, project_root: Path) -> int:
+    if args.action == "repair":
+        payload = run_demo_repair(project_root)
+        print(json.dumps(payload, indent=2))
+        return 0 if payload.get("success") else 1
+    return 1
+
+
+def run_demo_repair(project_root: Path) -> dict[str, Any]:
+    temp_root = Path(tempfile.mkdtemp(prefix="code_rpa_demo_repair_")) / project_root.name
+    shutil.copytree(
+        project_root,
+        temp_root,
+        ignore=shutil.ignore_patterns(".git", ".venv", ".pytest_cache", "__pycache__", "*.pyc"),
+    )
+    degrade_demo_export_selector(temp_root)
+
+    skill_path = temp_root / "example_skills" / "web_report_export" / "skill.yaml"
+    skill = prepare_demo_skill(temp_root, SkillLoader().load(skill_path))
+    page = DemoRepairPage()
+    failure_result = RPAExecutor(storage_root=temp_root / "storage").run(skill, page=page)
+    if failure_result.status != "failed" or not failure_result.repair_request_path:
+        return {
+            "success": False,
+            "message": "repair demo did not produce the expected failure",
+            "project_copy": str(temp_root),
+        }
+
+    repair_request = read_json(Path(failure_result.repair_request_path))
+    patch = build_demo_patch(skill, repair_request)
+    validation = PatchValidator().validate_patch(repair_request, patch, current_skill=skill)
+    if not validation.is_valid:
+        return {
+            "success": False,
+            "message": "mock patch failed validation",
+            "errors": validation.errors,
+            "project_copy": str(temp_root),
+        }
+
+    sandbox_result = SandboxRunner().run_patch(skill=skill, patch=patch, project_root=temp_root)
+    if not sandbox_result.success:
+        return {
+            "success": False,
+            "message": "sandbox test failed",
+            "stdout": sandbox_result.stdout,
+            "stderr": sandbox_result.stderr,
+            "project_copy": str(temp_root),
+        }
+
+    version_manager = VersionManager(temp_root / "storage" / "versions")
+    version_manager.snapshot(skill, reason="demo_pre_repair")
+    version_dir = version_manager.create_new_version(
+        skill=skill,
+        patched_skill_path=sandbox_result.patched_skill_path,
+        patch=patch,
+        test_result=sandbox_result,
+    )
+
+    repaired_skill = prepare_demo_skill(temp_root, SkillLoader().load(skill_path))
+    rerun_result = RPAExecutor(storage_root=temp_root / "storage").run(repaired_skill, page=DemoRepairPage())
+
+    return {
+        "success": rerun_result.status == "success",
+        "message": "repair demo success" if rerun_result.status == "success" else "repair demo rerun failed",
+        "failed_step_id": repair_request["failed_step_id"],
+        "repair_request_path": failure_result.repair_request_path,
+        "sandbox_success": sandbox_result.success,
+        "version_id": version_dir.name,
+        "rerun_status": rerun_result.status,
+        "project_copy": str(temp_root),
+    }
 
 
 def create_skill(project_root: Path, skill_id: str) -> None:
@@ -286,3 +395,139 @@ def read_json(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise SystemExit(f"JSON root must be an object: {path}")
     return data
+
+
+def check_python_version() -> dict[str, Any]:
+    version = sys.version_info
+    ok = (version.major, version.minor) >= (3, 11)
+    return {
+        "name": "Python version",
+        "ok": ok,
+        "details": f"{version.major}.{version.minor}.{version.micro}",
+    }
+
+
+def check_project_root(project_root: Path) -> dict[str, Any]:
+    ok = (project_root / "rpa_runtime").exists() and (project_root / "skill_registry").exists()
+    return {"name": "project root", "ok": ok, "details": str(project_root)}
+
+
+def check_import(module_name: str, label: str) -> dict[str, Any]:
+    try:
+        __import__(module_name)
+        return {"name": label, "ok": True, "details": module_name}
+    except Exception as error:
+        return {"name": label, "ok": False, "details": str(error)}
+
+
+def check_path(path: Path, label: str) -> dict[str, Any]:
+    return {"name": label, "ok": path.exists(), "details": str(path)}
+
+
+def check_registry(project_root: Path) -> dict[str, Any]:
+    try:
+        registry = SkillRegistry(project_root / "example_skills")
+        skill_ids = registry.list_skill_ids()
+        loadable = [registry.load(skill_id).id for skill_id in skill_ids]
+        return {"name": "registry loads", "ok": bool(loadable), "details": loadable}
+    except Exception as error:
+        return {"name": "registry loads", "ok": False, "details": str(error)}
+
+
+def degrade_demo_export_selector(project_root: Path) -> None:
+    selectors_path = project_root / "example_skills" / "web_report_export" / "selectors.yaml"
+    selectors = yaml.safe_load(selectors_path.read_text(encoding="utf-8")) or {}
+    selectors["export_button"] = {
+        "primary": "#export-button-primary-missing",
+        "fallbacks": [],
+    }
+    selectors_path.write_text(yaml.safe_dump(selectors, sort_keys=False), encoding="utf-8")
+
+
+def prepare_demo_skill(project_root: Path, skill: Any) -> Any:
+    fixture_url = (project_root / "tests" / "fixtures" / "report_demo.html").resolve().as_uri()
+    resolved_steps = []
+    for step in skill.steps:
+        resolved_step = dict(step)
+        if resolved_step.get("url") == "{{REPORT_DEMO_URL}}":
+            resolved_step["url"] = fixture_url
+        resolved_steps.append(resolved_step)
+    return replace(skill, steps=resolved_steps)
+
+
+def build_demo_patch(skill: Any, repair_request: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "patch_id": "demo-repair-export-fallback",
+        "skill_id": skill.id,
+        "skill_name": skill.name,
+        "base_version": skill.version,
+        "target_step_id": repair_request["failed_step_id"],
+        "patch_type": "fallback_selector_add",
+        "selector_changes": {
+            "target_file": "example_skills/web_report_export/selectors.yaml",
+            "selector_ref": "export_button",
+            "add_fallbacks": ["button[data-testid='export-button']"],
+        },
+        "code_changes": None,
+        "reason": "Demo repair adds the stable data-testid fallback for the export button.",
+        "risk_level": "low",
+        "test_command": [
+            "python",
+            "-m",
+            "pytest",
+            "tests/test_runtime.py::test_executor_runs_login_report_export_flow",
+            "tests/test_runtime.py::test_click_export_primary_selector_fails_and_fallback_succeeds",
+        ],
+        "allowed_repair_scope": repair_request["allowed_repair_scope"],
+        "created_at": repair_request.get("created_at"),
+    }
+
+
+class DemoRepairPage:
+    def __init__(self):
+        self.available_selectors = {
+            "#username",
+            "#password",
+            "#login-submit",
+            "#report-page-link",
+            "#date-start",
+            "#date-end",
+            "button[data-testid='export-button']",
+            "#export-success",
+        }
+        self.url = "about:blank"
+        self.html = """
+        <html>
+          <body>
+            <input id="username" />
+            <input id="password" />
+            <button id="login-submit">Sign in</button>
+            <a id="report-page-link">Reports</a>
+            <input id="date-start" />
+            <input id="date-end" />
+            <button data-testid="export-button">Export Report</button>
+            <p id="export-success">Export ready</p>
+          </body>
+        </html>
+        """
+
+    def goto(self, url):
+        self.url = url
+
+    def click(self, selector):
+        if selector not in self.available_selectors:
+            raise RuntimeError(f"selector not found: {selector}")
+
+    def fill(self, selector, value):
+        if selector not in self.available_selectors:
+            raise RuntimeError(f"selector not found: {selector}")
+
+    def wait_for_selector(self, selector):
+        if selector not in self.available_selectors:
+            raise RuntimeError(f"selector not found: {selector}")
+
+    def screenshot(self, path, full_page=True):
+        Path(path).write_bytes(b"fake screenshot")
+
+    def content(self):
+        return self.html

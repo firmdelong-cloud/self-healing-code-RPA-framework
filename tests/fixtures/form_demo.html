@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Form Demo</title>
+  </head>
+  <body>
+    <main>
+      <h1>Lead Form</h1>
+      <form id="lead-form">
+        <label>
+          Name
+          <input id="customer-name" data-testid="customer-name" name="customer_name" />
+        </label>
+        <label>
+          Phone
+          <input id="customer-phone" data-testid="customer-phone" name="customer_phone" />
+        </label>
+        <label>
+          Notes
+          <textarea id="customer-notes" data-testid="customer-notes" name="customer_notes"></textarea>
+        </label>
+        <button id="submit-form" data-testid="submit-form" type="submit">Submit</button>
+      </form>
+      <p id="submit-success" data-testid="submit-success" hidden>Submission received</p>
+    </main>
+
+    <script>
+      document.querySelector("#lead-form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        document.querySelector("#submit-success").hidden = false;
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,29 @@
+customer_name_input:
+  primary: "#customer-name"
+  fallbacks:
+    - "[data-testid='customer-name']"
+    - "input[name='customer_name']"
+
+customer_phone_input:
+  primary: "#customer-phone"
+  fallbacks:
+    - "[data-testid='customer-phone']"
+    - "input[name='customer_phone']"
+
+customer_notes_input:
+  primary: "#customer-notes"
+  fallbacks:
+    - "[data-testid='customer-notes']"
+    - "textarea[name='customer_notes']"
+
+submit_button:
+  primary: "#submit-form"
+  fallbacks:
+    - "[data-testid='submit-form']"
+    - "text=Submit"
+
+submit_success_message:
+  primary: "#submit-success"
+  fallbacks:
+    - "[data-testid='submit-success']"
+    - "text=Submission received"
