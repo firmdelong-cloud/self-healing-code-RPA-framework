@@ -4,16 +4,17 @@ retry:
 repair_scope:
   scope_type: selector_only
   allowed_files:
-    - example_skills/web_report_export/selectors.yaml
-  allowed_selector_refs: []
+    - example_skills/customer_search_export/selectors.yaml
+  allowed_selector_refs:
+    - customer_keyword_input
+    - customer_search_button
+    - customer_results_table
   must_not_touch_other_steps: true
   must_not_touch_runtime: true
-allowed_patch_scope:
-  - failed_step
-  - selectors
 sandbox:
   required: true
   command:
     - python
     - -m
     - pytest
+    - tests/test_customer_search_export.py

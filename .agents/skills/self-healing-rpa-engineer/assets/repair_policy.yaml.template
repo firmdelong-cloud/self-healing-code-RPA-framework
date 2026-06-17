@@ -6,7 +6,7 @@ repair_scope:
   allowed_files:
     - example_skills/{skill_id}/selectors.yaml
   allowed_selector_refs:
-    - submit_button
+    - {selector_ref}
   must_not_touch_other_steps: true
   must_not_touch_runtime: true
 sandbox:

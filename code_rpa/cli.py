@@ -18,6 +18,7 @@ from repair_agent.sandbox_runner import SandboxRunner
 from rpa_runtime.executor import RPAExecutor
 from skill_registry.registry import SkillRegistry
 from skill_registry.loader import SkillLoader
+from skill_registry.validator import SkillValidator
 from skill_registry.version_manager import VersionManager
 
 import yaml
@@ -57,6 +58,8 @@ def build_parser() -> argparse.ArgumentParser:
     skill_run.add_argument("skill_id")
     skill_test = skill_sub.add_parser("test")
     skill_test.add_argument("skill_id")
+    skill_validate = skill_sub.add_parser("validate")
+    skill_validate.add_argument("skill_id")
 
     repair_parser = subparsers.add_parser("repair")
     repair_sub = repair_parser.add_subparsers(dest="action")
@@ -93,8 +96,16 @@ def handle_skill(args: argparse.Namespace, project_root: Path) -> int:
         return 0
 
     if args.action == "create":
-        create_skill(project_root, args.skill_id)
-        print(f"created example_skills/{args.skill_id}")
+        created = create_skill(project_root, args.skill_id)
+        print(json.dumps({
+            "status": "ok",
+            "skill_id": args.skill_id,
+            "created": created,
+            "next_commands": [
+                f"python -m code_rpa skill validate {args.skill_id}",
+                f"python -m code_rpa skill test {args.skill_id}",
+            ],
+        }, indent=2))
         return 0
 
     if args.action == "run":
@@ -104,6 +115,9 @@ def handle_skill(args: argparse.Namespace, project_root: Path) -> int:
 
     if args.action == "test":
         return test_skill(project_root, args.skill_id)
+
+    if args.action == "validate":
+        return validate_skill(project_root, args.skill_id)
 
     return 1
 
@@ -275,7 +289,7 @@ def run_demo_repair(project_root: Path) -> dict[str, Any]:
     }
 
 
-def create_skill(project_root: Path, skill_id: str) -> None:
+def create_skill(project_root: Path, skill_id: str) -> dict[str, str]:
     validate_skill_id(skill_id)
     skill_dir = project_root / "example_skills" / skill_id
     if skill_dir.exists():
@@ -284,14 +298,44 @@ def create_skill(project_root: Path, skill_id: str) -> None:
     skill_dir.mkdir(parents=True)
     tests_dir = skill_dir / "tests"
     tests_dir.mkdir()
+    fixture_dir = project_root / "tests" / "fixtures"
+    fixture_dir.mkdir(parents=True, exist_ok=True)
 
     skill_name = title_from_skill_id(skill_id)
+    fixture_placeholder = fixture_placeholder_for(skill_id)
+    selector_ref = "page_title"
     assets_dir = project_root / ".agents" / "skills" / "self-healing-rpa-engineer" / "assets"
-    write_template(assets_dir / "skill.yaml.template", skill_dir / "skill.yaml", skill_id, skill_name)
-    write_template(assets_dir / "selectors.yaml.template", skill_dir / "selectors.yaml", skill_id, skill_name)
-    write_template(assets_dir / "repair_policy.yaml.template", skill_dir / "repair_policy.yaml", skill_id, skill_name)
-    (skill_dir / "main.py").write_text(main_py_template(skill_id), encoding="utf-8")
-    (tests_dir / "test_skill.py").write_text(test_skill_template(skill_id), encoding="utf-8")
+    write_template(
+        assets_dir / "skill.yaml.template",
+        skill_dir / "skill.yaml",
+        skill_id,
+        skill_name,
+        fixture_placeholder,
+        selector_ref,
+    )
+    write_template(
+        assets_dir / "selectors.yaml.template",
+        skill_dir / "selectors.yaml",
+        skill_id,
+        skill_name,
+        fixture_placeholder,
+        selector_ref,
+    )
+    write_template(
+        assets_dir / "repair_policy.yaml.template",
+        skill_dir / "repair_policy.yaml",
+        skill_id,
+        skill_name,
+        fixture_placeholder,
+        selector_ref,
+    )
+    (skill_dir / "main.py").write_text(main_py_template(skill_id, fixture_placeholder), encoding="utf-8")
+    (tests_dir / "test_skill.py").write_text(test_skill_template(skill_id, fixture_placeholder), encoding="utf-8")
+    (fixture_dir / f"{skill_id}.html").write_text(skill_fixture_template(skill_id, skill_name), encoding="utf-8")
+    return {
+        "skill_dir": str(skill_dir),
+        "fixture_path": str(fixture_dir / f"{skill_id}.html"),
+    }
 
 
 def run_skill(project_root: Path, skill_id: str) -> dict[str, Any]:
@@ -302,12 +346,26 @@ def run_skill(project_root: Path, skill_id: str) -> dict[str, Any]:
 
 def test_skill(project_root: Path, skill_id: str) -> int:
     skill_test_dir = project_root / "example_skills" / skill_id / "tests"
+    root_test_file = project_root / "tests" / f"test_{skill_id}.py"
+    pytest_targets: list[str] = []
+    if skill_test_dir.exists():
+        pytest_targets.append(str(skill_test_dir))
+    if root_test_file.exists():
+        pytest_targets.append(str(root_test_file))
+    if not pytest_targets:
+        pytest_targets.append(str(skill_test_dir))
     completed = subprocess.run(
-        [sys.executable, "-m", "pytest", str(skill_test_dir)],
+        [sys.executable, "-m", "pytest", *pytest_targets],
         cwd=project_root,
         check=False,
     )
     return completed.returncode
+
+
+def validate_skill(project_root: Path, skill_id: str) -> int:
+    result = SkillValidator(project_root).validate(skill_id)
+    print(json.dumps(result.to_dict(), indent=2))
+    return 0 if result.status == "ok" else 1
 
 
 def load_skill_main(project_root: Path, skill_id: str) -> Any:
@@ -322,15 +380,24 @@ def load_skill_main(project_root: Path, skill_id: str) -> Any:
     return module
 
 
-def write_template(template_path: Path, target_path: Path, skill_id: str, skill_name: str) -> None:
+def write_template(
+    template_path: Path,
+    target_path: Path,
+    skill_id: str,
+    skill_name: str,
+    fixture_placeholder: str,
+    selector_ref: str,
+) -> None:
     rendered = template_path.read_text(encoding="utf-8").format(
         skill_id=skill_id,
         skill_name=skill_name,
+        fixture_placeholder=fixture_placeholder,
+        selector_ref=selector_ref,
     )
     target_path.write_text(rendered, encoding="utf-8")
 
 
-def main_py_template(skill_id: str) -> str:
+def main_py_template(skill_id: str, fixture_placeholder: str) -> str:
     return f'''"""Entrypoint for the {skill_id} Skill."""
 
 from __future__ import annotations
@@ -338,6 +405,7 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 from typing import Any
+from dataclasses import replace
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
@@ -345,12 +413,15 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from rpa_runtime.browser import PlaywrightBrowser
 from rpa_runtime.executor import RPAExecutor, RunResult
-from skill_registry.loader import SkillLoader
+from skill_registry.loader import SkillLoader, SkillDefinition
+
+
+FIXTURE_PLACEHOLDER = "{fixture_placeholder}"
 
 
 def run(page: Any | None = None, storage_root: Path | None = None) -> RunResult:
     skill_path = Path(__file__).with_name("skill.yaml")
-    skill = SkillLoader().load(skill_path)
+    skill = _prepare_skill(SkillLoader().load(skill_path))
     executor = RPAExecutor(
         storage_root=storage_root or PROJECT_ROOT / "storage",
         browser=PlaywrightBrowser(headless=True),
@@ -358,13 +429,25 @@ def run(page: Any | None = None, storage_root: Path | None = None) -> RunResult:
     return executor.run(skill, page=page)
 
 
+def _prepare_skill(skill: SkillDefinition) -> SkillDefinition:
+    fixture_url = (PROJECT_ROOT / "tests" / "fixtures" / "{skill_id}.html").resolve().as_uri()
+    resolved_steps = []
+    for step in skill.steps:
+        resolved_step = dict(step)
+        if resolved_step.get("url") == chr(123) * 2 + FIXTURE_PLACEHOLDER + chr(125) * 2:
+            resolved_step["url"] = fixture_url
+        resolved_steps.append(resolved_step)
+    return replace(skill, steps=resolved_steps)
+
+
 if __name__ == "__main__":
     print(run().to_dict())
 '''
 
 
-def test_skill_template(skill_id: str) -> str:
+def test_skill_template(skill_id: str, fixture_placeholder: str) -> str:
     return f'''from pathlib import Path
+import importlib.util
 
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
@@ -376,7 +459,34 @@ def test_skill_loads():
     skill = SkillLoader().load(SKILL_DIR / "skill.yaml")
     assert skill.id == "{skill_id}"
     assert skill.version == "0.1.0"
+    assert "outputs" in skill.raw
+
+
+def test_fixture_exists():
+    assert (Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "{skill_id}.html").exists()
 '''
+
+
+def skill_fixture_template(skill_id: str, skill_name: str) -> str:
+    return f'''<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>{skill_name}</title>
+  </head>
+  <body>
+    <main>
+      <h1 id="page-title" data-testid="page-title">{skill_name}</h1>
+      <p id="page-body">Autogenerated fixture for {skill_id}.</p>
+    </main>
+  </body>
+</html>
+'''
+
+
+def fixture_placeholder_for(skill_id: str) -> str:
+    normalized = "".join(char if char.isalnum() else "_" for char in skill_id).upper()
+    return f"{normalized}_FIXTURE_URL"
 
 
 def validate_skill_id(skill_id: str) -> None:

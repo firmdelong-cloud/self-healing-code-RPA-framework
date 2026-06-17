@@ -1,9 +1,18 @@
 id: web_report_export
 name: Web Report Export
 version: 0.2.0
+description: Log in to a local report page, select a date range, export a report, and verify success.
 entrypoint: main.py
 selectors: selectors.yaml
 repair_policy: repair_policy.yaml
+inputs:
+  username:
+    type: string
+    default: demo_user
+  password:
+    type: string
+    default: demo_password
+outputs: {}
 steps:
   - id: open_login_page
     type: navigate
@@ -48,4 +57,3 @@ steps:
     goal: Confirm that the export finished successfully.
     selector_ref: export_success_message
     target_description: Success message or download area shown after export is generated.
-

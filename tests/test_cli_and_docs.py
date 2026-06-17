@@ -5,6 +5,7 @@ import shutil
 import yaml
 
 from code_rpa.cli import main
+from skill_registry.validator import SkillValidator
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -44,15 +45,18 @@ def test_cli_skill_create_generates_standard_skill_files(tmp_path):
     assert (skill_dir / "repair_policy.yaml").exists()
     assert (skill_dir / "main.py").exists()
     assert (skill_dir / "tests" / "test_skill.py").exists()
+    assert (project / "tests" / "fixtures" / "invoice_export.html").exists()
     assert skill_yaml["id"] == "invoice_export"
     assert skill_yaml["name"] == "Invoice Export"
     assert skill_yaml["version"] == "0.1.0"
     assert "description" in skill_yaml
     assert "inputs" in skill_yaml
+    assert "outputs" in skill_yaml
     assert "steps" in skill_yaml
-    assert "primary" in selectors_yaml["submit_button"]
-    assert "fallbacks" in selectors_yaml["submit_button"]
+    assert "primary" in selectors_yaml["page_title"]
+    assert "fallbacks" in selectors_yaml["page_title"]
     assert repair_policy_yaml["repair_scope"]["scope_type"] == "selector_only"
+    assert SkillValidator(project).validate("invoice_export").status == "ok"
 
 
 def test_cli_repair_validate_accepts_legal_patch(tmp_path, capsys):
@@ -142,8 +146,13 @@ def test_readme_contains_key_sections():
         "CLI Usage",
         "python -m code_rpa doctor",
         "python -m code_rpa demo repair",
+        "python -m code_rpa skill validate",
         "Create a New Skill",
+        "Skill Quality Gate",
+        "Codex Generate Skill",
         "docs/skill-contract.md",
+        "docs/codex-generate-skill.md",
+        "customer_search_export",
         "Repair Pipeline",
         "Rollback",
         "Codex Repo Skill",

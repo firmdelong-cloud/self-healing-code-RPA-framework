@@ -1,0 +1,17 @@
+customer_keyword_input:
+  primary: "#customer-keyword"
+  fallbacks:
+    - "[data-testid='customer-keyword']"
+    - "input"
+
+customer_search_button:
+  primary: "#search-customers"
+  fallbacks:
+    - "[data-testid='search-customers']"
+    - "text=Search"
+
+customer_results_table:
+  primary: "#customer-results"
+  fallbacks:
+    - "[data-testid='customer-results']"
+    - "table"

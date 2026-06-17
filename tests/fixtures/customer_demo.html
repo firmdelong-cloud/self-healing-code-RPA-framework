@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Customer Search Demo</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 32px;
+      }
+
+      [hidden] {
+        display: none !important;
+      }
+
+      table {
+        border-collapse: collapse;
+        margin-top: 20px;
+      }
+
+      th,
+      td {
+        border: 1px solid #ccd3dd;
+        padding: 8px 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Customer Search</h1>
+      <label>
+        Customer keyword
+        <input id="customer-keyword" data-testid="customer-keyword" value="" />
+      </label>
+      <button id="search-customers" data-testid="search-customers" type="button">Search</button>
+
+      <table id="customer-results" data-testid="customer-results" hidden>
+        <thead>
+          <tr>
+            <th>Customer ID</th>
+            <th>Name</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="customer-results-body"></tbody>
+      </table>
+    </main>
+
+    <script>
+      const customers = [
+        ["C-1001", "Acme Logistics", "Active"],
+        ["C-1002", "Acme Retail", "Active"],
+        ["C-1003", "Northwind Supply", "Paused"]
+      ];
+
+      document.querySelector("#search-customers").addEventListener("click", () => {
+        const keyword = document.querySelector("#customer-keyword").value.toLowerCase();
+        const rows = customers.filter((row) => row.join(" ").toLowerCase().includes(keyword));
+        const body = document.querySelector("#customer-results-body");
+        body.innerHTML = "";
+        for (const row of rows) {
+          const tr = document.createElement("tr");
+          for (const cell of row) {
+            const td = document.createElement("td");
+            td.textContent = cell;
+            tr.appendChild(td);
+          }
+          body.appendChild(tr);
+        }
+        document.querySelector("#customer-results").hidden = false;
+      });
+    </script>
+  </body>
+</html>

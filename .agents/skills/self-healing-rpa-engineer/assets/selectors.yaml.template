@@ -1,4 +1,5 @@
-submit_button:
-  primary: "#submit"
+{selector_ref}:
+  primary: "#page-title"
   fallbacks:
-    - "button[data-testid='submit']"
+    - "[data-testid='page-title']"
+    - "h1"

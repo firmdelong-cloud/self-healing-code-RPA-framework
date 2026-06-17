@@ -21,15 +21,17 @@ Use this skill when working inside this repository on RPA Skills or selector-lev
 - High-risk steps require human confirmation and must not be auto-patched.
 - Every Skill must include pytest coverage.
 - Do not bypass safety checks, logs, snapshots, sandbox tests, or versioning.
+- Do not modify `rpa_runtime/`, `repair_agent/`, or `skill_registry/` when the task is only to create a new Skill.
 
 ## Workflow
 
 1. Read `AGENTS.md` before major runtime or repair changes.
 2. For architecture context, read `references/architecture.md`.
 3. For creating or updating a Skill, read `references/rpa-skill-spec.md` and use the templates in `assets/`.
-4. For patch work, read `references/patch-json-spec.md`.
-5. For repair flow or rollback work, read `references/repair-pipeline.md`.
-6. Run relevant pytest tests after changes.
+4. For natural-language Skill generation, read `docs/codex-generate-skill.md`.
+5. For patch work, read `references/patch-json-spec.md`.
+6. For repair flow or rollback work, read `references/repair-pipeline.md`.
+7. Run the quality gate after changes.
 
 ## Skill Creation
 
@@ -41,7 +43,29 @@ Create Skills under `example_skills/<skill_id>/` with:
 - `main.py`
 - `tests/test_skill.py`
 
+Every generated Skill must also include a local HTML fixture under `tests/fixtures/`.
+
 Prefer `python -m code_rpa skill create <skill_id>` for scaffolding.
+
+`skill.yaml` must include `id`, `name`, `version`, `description`, `inputs`, `outputs`, and `steps`.
+
+Each step must include `id`, `type`, and `goal`. Selector steps must use `selector_ref` or `selector_refs`.
+
+`selectors.yaml` must define a `primary` selector for each selector ref and should include `fallbacks`.
+
+`repair_policy.yaml` must use `repair_scope.scope_type: selector_only`.
+
+## Quality Gate
+
+Run all of these before finishing Skill generation:
+
+```powershell
+python -m code_rpa skill validate <skill_id>
+python -m code_rpa skill test <skill_id>
+python -m pytest
+```
+
+Do not mark a generated Skill complete if validation fails, pytest fails, the fixture is missing, or selector refs bypass `selector_resolver`.
 
 ## Repair Constraints
 

@@ -9,6 +9,7 @@ Required files:
 - `repair_policy.yaml`
 - `main.py`
 - `tests/test_skill.py`
+- a local fixture in `tests/fixtures/`
 
 `skill.yaml` must include:
 
@@ -20,6 +21,7 @@ Required files:
 - `selectors`
 - `repair_policy`
 - `inputs`
+- `outputs`
 - `steps`
 
 Each step must include:
@@ -43,4 +45,18 @@ Selectors must use logical names and define:
 - `primary`
 - `fallbacks`
 
+`repair_policy.yaml` must use:
+
+- `repair_scope.scope_type: selector_only`
+- repository-relative `allowed_files`
+- `must_not_touch_runtime: true`
+
 Tests should cover Skill loading and at least one execution path with fake pages or local fixtures.
+
+Quality gate:
+
+```powershell
+python -m code_rpa skill validate <skill_id>
+python -m code_rpa skill test <skill_id>
+python -m pytest
+```

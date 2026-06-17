@@ -49,6 +49,7 @@ The MVP is intentionally narrow:
 - `selectors.yaml` primary and fallback selectors.
 - Generic Web steps: `goto`, `click`, `fill`, `select`, `wait_for`, `extract_text`, `extract_table`, `download_file`, `assert_text`, `assert_url`, and `screenshot`.
 - Structured Skill outputs through `RunResult.outputs`.
+- Skill quality validation with `python -m code_rpa skill validate <skill_id>`.
 - Failure screenshots and DOM snapshots.
 - Selector-only repair patches.
 - Sandbox-tested version updates.
@@ -84,6 +85,7 @@ Additional example Skills:
 - `login_and_export_report`: generic step version of the login/export workflow.
 - `scrape_table_to_csv`: extracts a local HTML table, saves CSV output, and returns `table_rows` plus `csv_path`.
 - `form_submit_workflow`: fills a local form fixture, submits it, and verifies success text.
+- `customer_search_export`: searches customer records, exports the result table to CSV, and returns `csv_path` plus `table_rows`.
 
 ## Run Tests
 
@@ -110,6 +112,7 @@ python -m code_rpa skill list
 python -m code_rpa skill run web_report_export
 python -m code_rpa skill test web_report_export
 python -m code_rpa skill create my_new_skill
+python -m code_rpa skill validate my_new_skill
 python -m code_rpa repair validate path\to\repair_request.json path\to\patch.json
 python -m code_rpa repair sandbox path\to\repair_request.json path\to\patch.json
 python -m code_rpa version list web_report_export
@@ -223,6 +226,7 @@ example_skills/invoice_export/
   repair_policy.yaml
   main.py
   tests/test_skill.py
+tests/fixtures/invoice_export.html
 ```
 
 Then edit:
@@ -233,6 +237,34 @@ Then edit:
 - `tests/test_skill.py` for Skill-level pytest coverage.
 
 The formal Skill contract is documented in `docs/skill-contract.md`.
+
+## Skill Quality Gate
+
+Before a Skill is considered usable, run:
+
+```powershell
+python -m code_rpa skill validate <skill_id>
+python -m code_rpa skill test <skill_id>
+python -m pytest
+```
+
+`skill validate` checks the Skill directory, required YAML files, required `skill.yaml` fields, step `id/type/goal`, selector references, selector `primary` entries, repair scope, pytest coverage, and local HTML fixtures. Missing fallback selectors are warnings, not hard failures.
+
+## Codex Generate Skill
+
+When asking Codex to generate a new Skill, describe the business workflow, local fixture, inputs, outputs, and assertions. Codex should create the Skill files, a local fixture, and pytest coverage, then run the quality gate.
+
+Read the full guide at `docs/codex-generate-skill.md`.
+
+Codex must not modify runtime core code by default, bypass `selector_resolver`, write absolute local paths, skip pytest, call an LLM API, add Web UI, connect real websites, add OCR, or add desktop RPA.
+
+Example target:
+
+```powershell
+python -m code_rpa skill validate customer_search_export
+python -m code_rpa skill test customer_search_export
+python -m code_rpa skill run customer_search_export
+```
 
 ## Codex Repo Skill
 
@@ -248,6 +280,7 @@ It teaches future Codex runs to follow this framework's rules: no LLM calls duri
 
 - Web RPA only.
 - Selector-level repair only.
+- Phase five focuses on Skill quality gates and Codex Skill generation, not new automation surfaces.
 - No Web UI.
 - No real website integration.
 - No desktop RPA.
@@ -260,7 +293,7 @@ It teaches future Codex runs to follow this framework's rules: no LLM calls duri
 
 - Normal execution must not call an LLM.
 - Patches must not modify runtime code, repair framework code, registry code, or arbitrary Python files.
-- Phase three only allows selector-level patches.
+- Current automated repair only allows selector-level patches.
 - `code_changes` must be `null`.
 - High-risk steps must require human confirmation.
 - High-risk patches are rejected for automatic application.

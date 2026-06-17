@@ -1,0 +1,52 @@
+id: customer_search_export
+name: Customer Search Export
+version: 0.1.0
+description: Search local customer records, extract the result table, and export the data to CSV.
+entrypoint: main.py
+selectors: selectors.yaml
+repair_policy: repair_policy.yaml
+inputs:
+  keyword:
+    type: string
+    default: Acme
+outputs:
+  csv_path:
+    type: string
+  table_rows:
+    type: integer
+steps:
+  - id: open_customer_page
+    type: goto
+    goal: Open the local customer search page.
+    url: "{{CUSTOMER_DEMO_URL}}"
+
+  - id: enter_customer_keyword
+    type: fill
+    goal: Enter the customer keyword.
+    selector_ref: customer_keyword_input
+    value: Acme
+
+  - id: click_search
+    type: click
+    goal: Click the customer search button.
+    selector_ref: customer_search_button
+
+  - id: wait_for_results
+    type: wait_for
+    goal: Wait for the customer results table.
+    selector_ref: customer_results_table
+
+  - id: extract_customer_table
+    type: extract_table
+    goal: Extract customer search results and save them to CSV.
+    selector_ref: customer_results_table
+    output_key: customer_rows
+    row_count_output_key: table_rows
+    output_path: customer_search_export.csv
+    output_path_key: csv_path
+    has_header: true
+
+  - id: verify_csv_created
+    type: assert_file_exists
+    goal: Confirm the customer CSV export exists.
+    path_from_output: csv_path
