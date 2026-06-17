@@ -11,6 +11,7 @@ import sys
 from typing import Any
 
 from repair_agent.patch_validator import PatchValidator
+from repair_agent.sandbox_runner import SandboxRunner
 from skill_registry.registry import SkillRegistry
 from skill_registry.version_manager import VersionManager
 
@@ -51,6 +52,9 @@ def build_parser() -> argparse.ArgumentParser:
     repair_validate = repair_sub.add_parser("validate")
     repair_validate.add_argument("repair_request_path")
     repair_validate.add_argument("patch_path")
+    repair_sandbox = repair_sub.add_parser("sandbox")
+    repair_sandbox.add_argument("repair_request_path")
+    repair_sandbox.add_argument("patch_path")
 
     version_parser = subparsers.add_parser("version")
     version_sub = version_parser.add_subparsers(dest="action")
@@ -89,21 +93,60 @@ def handle_skill(args: argparse.Namespace, project_root: Path) -> int:
 
 def handle_repair(args: argparse.Namespace, project_root: Path) -> int:
     repair_request = read_json(Path(args.repair_request_path))
+    patch = read_json(Path(args.patch_path))
     skill_id = repair_request["skill_id"]
     skill = SkillRegistry(project_root / "example_skills").load(skill_id)
+
+    if args.action == "validate":
+        validator = PatchValidator()
+        result = validator.validate_patch_file(
+            args.repair_request_path,
+            args.patch_path,
+            current_skill=skill,
+        )
+        if result.is_valid:
+            print("valid")
+            return 0
+        print("invalid")
+        for error in result.errors:
+            print(error)
+        return 1
+
+    if args.action == "sandbox":
+        return run_repair_sandbox(project_root, skill, repair_request, patch, args)
+
+    return 1
+
+
+def run_repair_sandbox(
+    project_root: Path,
+    skill: Any,
+    repair_request: dict[str, Any],
+    patch: dict[str, Any],
+    args: argparse.Namespace,
+) -> int:
     validator = PatchValidator()
-    result = validator.validate_patch_file(
+    validation = validator.validate_patch_file(
         args.repair_request_path,
         args.patch_path,
         current_skill=skill,
     )
-    if result.is_valid:
-        print("valid")
-        return 0
-    print("invalid")
-    for error in result.errors:
-        print(error)
-    return 1
+    if not validation.is_valid:
+        print("invalid")
+        for error in validation.errors:
+            print(error)
+        return 1
+
+    result = SandboxRunner().run_patch(skill=skill, patch=patch, project_root=project_root)
+    payload = {
+        "success": result.success,
+        "stdout": result.stdout,
+        "stderr": result.stderr,
+        "duration": result.duration,
+        "patched_skill_path": result.patched_skill_path,
+    }
+    print(json.dumps(payload, indent=2))
+    return 0 if result.success else 1
 
 
 def handle_version(args: argparse.Namespace, project_root: Path) -> int:
@@ -213,18 +256,17 @@ if __name__ == "__main__":
 
 def test_skill_template(skill_id: str) -> str:
     return f'''from pathlib import Path
-import importlib.util
 
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location("{skill_id}_main", SKILL_DIR / "main.py")
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
+
+from skill_registry.loader import SkillLoader
 
 
-def test_skill_loads(tmp_path):
-    result = module.run(storage_root=tmp_path)
-    assert result.skill_id == "{skill_id}"
+def test_skill_loads():
+    skill = SkillLoader().load(SKILL_DIR / "skill.yaml")
+    assert skill.id == "{skill_id}"
+    assert skill.version == "0.1.0"
 '''
 
 
@@ -244,4 +286,3 @@ def read_json(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise SystemExit(f"JSON root must be an object: {path}")
     return data
-

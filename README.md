@@ -12,6 +12,18 @@ Current scope: Web RPA with selector-level self-healing.
 
 It is not ready for production use without additional security review, scheduling, authentication, deployment hardening, and environment-specific approval controls.
 
+## Quick Start
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python -m playwright install chromium
+python -m code_rpa skill list
+python -m code_rpa skill run web_report_export
+python -m pytest
+```
+
 ## What This Is Not
 
 - Not a traditional visual RPA designer.
@@ -82,7 +94,7 @@ Run the real Chromium integration test:
 python -m pytest -m integration
 ```
 
-## CLI
+## CLI Usage
 
 ```powershell
 python -m code_rpa skill list
@@ -90,9 +102,22 @@ python -m code_rpa skill run web_report_export
 python -m code_rpa skill test web_report_export
 python -m code_rpa skill create my_new_skill
 python -m code_rpa repair validate path\to\repair_request.json path\to\patch.json
+python -m code_rpa repair sandbox path\to\repair_request.json path\to\patch.json
 python -m code_rpa version list web_report_export
 python -m code_rpa version rollback web_report_export <version_id>
 ```
+
+## Repair Pipeline
+
+The repair pipeline is local, selector-only, and test-gated:
+
+1. Run a Skill through the Python runtime.
+2. Capture screenshot, DOM, URL, error logs, and attempted selectors on failure.
+3. Generate `repair_request.json`.
+4. Validate a selector-only `patch.json`.
+5. Apply the patch only inside `SandboxRunner`.
+6. Run the patch test command inside the sandbox.
+7. Apply a new version with `VersionManager` only after tests pass.
 
 ## repair_request.json
 
@@ -152,7 +177,7 @@ example_skills/web_report_export/selectors.yaml
 
 Only a successful sandbox result may be passed to `VersionManager.create_new_version`.
 
-## Versions And Rollback
+## Rollback
 
 `VersionManager` stores Skill versions under `storage/versions/<skill_id>/`.
 
@@ -166,7 +191,7 @@ It supports:
 
 Every version stores `metadata.json` with patch ID, base version, test result, changed files, and creation time. Rollback restores the Skill files and updates the current version pointer.
 
-## Create A New RPA Skill
+## Create a New Skill
 
 Use the CLI scaffold:
 
@@ -191,6 +216,28 @@ Then edit:
 - `selectors.yaml` for primary and fallback selectors.
 - `repair_policy.yaml` for retry and sandbox policy.
 - `tests/test_skill.py` for Skill-level pytest coverage.
+
+## Codex Repo Skill
+
+This repository includes a Codex repo skill at:
+
+```text
+.agents/skills/self-healing-rpa-engineer/
+```
+
+It teaches future Codex runs to follow this framework's rules: no LLM calls during normal execution, selector-only patches, `PatchValidator`, `SandboxRunner`, `VersionManager`, pytest coverage, and human confirmation for high-risk steps.
+
+## Current Limitations
+
+- Web RPA only.
+- Selector-level repair only.
+- No Web UI.
+- No real website integration.
+- No desktop RPA.
+- No OCR RPA.
+- No LLM API integration.
+- No automatic Python code patching.
+- No production scheduler or deployment hardening.
 
 ## Safety Boundaries
 

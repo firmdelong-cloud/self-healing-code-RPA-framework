@@ -1,7 +1,4 @@
-# Add logical selector refs here.
-# Example:
-# submit_button:
-#   primary: "#submit"
-#   fallbacks:
-#     - "button[data-testid='submit']"
-
+submit_button:
+  primary: "#submit"
+  fallbacks:
+    - "button[data-testid='submit']"

@@ -15,9 +15,11 @@ Required files:
 - `id`
 - `name`
 - `version`
+- `description`
 - `entrypoint`
 - `selectors`
 - `repair_policy`
+- `inputs`
 - `steps`
 
 Each step must include:
@@ -42,4 +44,3 @@ Selectors must use logical names and define:
 - `fallbacks`
 
 Tests should cover Skill loading and at least one execution path with fake pages or local fixtures.
-
