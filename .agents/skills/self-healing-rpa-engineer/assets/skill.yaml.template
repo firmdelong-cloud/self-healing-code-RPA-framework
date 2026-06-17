@@ -1,0 +1,12 @@
+id: "{skill_id}"
+name: "{skill_name}"
+version: 0.1.0
+entrypoint: main.py
+selectors: selectors.yaml
+repair_policy: repair_policy.yaml
+steps:
+  - id: open_page
+    type: navigate
+    goal: Open the starting page for this Skill.
+    url: "about:blank"
+

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Report Demo</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 32px;
+        max-width: 760px;
+      }
+
+      section {
+        border: 1px solid #d7dce2;
+        margin-bottom: 24px;
+        padding: 20px;
+      }
+
+      label {
+        display: block;
+        margin: 12px 0;
+      }
+
+      input {
+        display: block;
+        margin-top: 6px;
+        padding: 8px;
+        width: 240px;
+      }
+
+      button,
+      a {
+        display: inline-block;
+        margin-top: 12px;
+      }
+
+      [hidden] {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section id="login-panel">
+        <h1>Admin Login</h1>
+        <form id="login-form">
+          <label>
+            Username
+            <input id="username" name="username" data-testid="username-input" autocomplete="username" />
+          </label>
+          <label>
+            Password
+            <input
+              id="password"
+              name="password"
+              data-testid="password-input"
+              type="password"
+              autocomplete="current-password"
+            />
+          </label>
+          <button id="login-submit" data-testid="login-submit" type="submit">Sign in</button>
+        </form>
+      </section>
+
+      <section id="dashboard-panel" hidden>
+        <h1>Dashboard</h1>
+        <a id="report-page-link" data-testid="report-page-link" href="#reports">Reports</a>
+      </section>
+
+      <section id="report-panel" hidden>
+        <h1>Report Export</h1>
+        <label>
+          Start date
+          <input id="date-start" name="date_start" data-testid="date-start" type="date" />
+        </label>
+        <label>
+          End date
+          <input id="date-end" name="date_end" data-testid="date-end" type="date" />
+        </label>
+        <button id="export-report" data-testid="export-button" type="button">Export Report</button>
+        <div id="download-area" data-testid="download-area" hidden>
+          <p id="export-success" data-testid="export-success">Export ready</p>
+          <a id="download-link" data-testid="download-link" download="report.csv" href="data:text/csv,id,total%0A1,100">
+            Download CSV
+          </a>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const loginPanel = document.querySelector("#login-panel");
+      const dashboardPanel = document.querySelector("#dashboard-panel");
+      const reportPanel = document.querySelector("#report-panel");
+      const downloadArea = document.querySelector("#download-area");
+
+      document.querySelector("#login-form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        loginPanel.hidden = true;
+        dashboardPanel.hidden = false;
+      });
+
+      document.querySelector("#report-page-link").addEventListener("click", (event) => {
+        event.preventDefault();
+        dashboardPanel.hidden = true;
+        reportPanel.hidden = false;
+      });
+
+      document.querySelector("#export-report").addEventListener("click", () => {
+        downloadArea.hidden = false;
+      });
+    </script>
+  </body>
+</html>
+

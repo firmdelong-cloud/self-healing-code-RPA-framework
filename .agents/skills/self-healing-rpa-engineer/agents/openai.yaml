@@ -1,0 +1,4 @@
+interface:
+  display_name: "Self-Healing RPA Engineer"
+  short_description: "Build and repair selector-level Code RPA skills."
+  default_prompt: "Create or repair a selector-level Self-Healing Code RPA skill following this repository's standards."

@@ -1,0 +1,51 @@
+id: web_report_export
+name: Web Report Export
+version: 0.2.0
+entrypoint: main.py
+selectors: selectors.yaml
+repair_policy: repair_policy.yaml
+steps:
+  - id: open_login_page
+    type: navigate
+    goal: Open the local report system login page.
+    url: "{{REPORT_DEMO_URL}}"
+
+  - id: login
+    type: login
+    goal: Enter demo credentials and submit the login form.
+    selector_refs:
+      username: username_input
+      password: password_input
+      submit: login_submit_button
+    username_value: demo_user
+    password_value: demo_password
+    target_description: Login form with username, password, and submit button.
+
+  - id: enter_report_page
+    type: click
+    goal: Enter the report page from the dashboard.
+    selector_ref: report_page_link
+    target_description: Navigation link that opens the report export page.
+
+  - id: select_date_range
+    type: select_date_range
+    goal: Select the date range for the report export.
+    selector_refs:
+      start_date: date_start_input
+      end_date: date_end_input
+    start_date: "2026-06-01"
+    end_date: "2026-06-17"
+    target_description: Start and end date inputs used to filter report data.
+
+  - id: click_export
+    type: click
+    goal: Click the export button to generate the report.
+    selector_ref: export_button
+    target_description: Button that starts report generation.
+
+  - id: verify_export_success
+    type: wait_for_selector
+    goal: Confirm that the export finished successfully.
+    selector_ref: export_success_message
+    target_description: Success message or download area shown after export is generated.
+

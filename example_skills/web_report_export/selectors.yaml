@@ -1,0 +1,48 @@
+username_input:
+  primary: "#username"
+  fallbacks:
+    - "input[name='username']"
+    - "[data-testid='username-input']"
+
+password_input:
+  primary: "#password"
+  fallbacks:
+    - "input[name='password']"
+    - "[data-testid='password-input']"
+
+login_submit_button:
+  primary: "#login-submit"
+  fallbacks:
+    - "button[data-testid='login-submit']"
+    - "text=Sign in"
+
+report_page_link:
+  primary: "#report-page-link"
+  fallbacks:
+    - "a[data-testid='report-page-link']"
+    - "text=Reports"
+
+date_start_input:
+  primary: "#date-start"
+  fallbacks:
+    - "input[name='date_start']"
+    - "[data-testid='date-start']"
+
+date_end_input:
+  primary: "#date-end"
+  fallbacks:
+    - "input[name='date_end']"
+    - "[data-testid='date-end']"
+
+export_button:
+  primary: "#export-button-primary-missing"
+  fallbacks:
+    - "button[data-testid='export-button']"
+    - "text=Export Report"
+
+export_success_message:
+  primary: "#export-success"
+  fallbacks:
+    - "[data-testid='export-success']"
+    - "text=Export ready"
+

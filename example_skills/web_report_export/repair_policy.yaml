@@ -1,0 +1,12 @@
+retry:
+  max_attempts: 1
+  delay_seconds: 0
+allowed_patch_scope:
+  - failed_step
+  - selectors
+sandbox:
+  required: true
+  command:
+    - python
+    - -m
+    - pytest
