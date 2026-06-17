@@ -201,3 +201,9 @@ Then edit:
 - High-risk steps must require human confirmation.
 - High-risk patches are rejected for automatic application.
 - Secrets, passwords, tokens, cookies, and session data must not be written to logs or repair requests.
+
+## License
+
+This project is licensed under the Apache License, Version 2.0.
+
+See [LICENSE](LICENSE) for the full license text.
