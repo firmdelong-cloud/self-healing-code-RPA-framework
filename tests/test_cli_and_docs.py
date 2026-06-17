@@ -72,8 +72,10 @@ def test_cli_repair_validate_accepts_legal_patch(tmp_path, capsys):
     ])
 
     captured = capsys.readouterr()
+    payload = json.loads(captured.out)
     assert exit_code == 0
-    assert "valid" in captured.out
+    assert payload["allowed"] is True
+    assert payload["patch_scope"] == "selector_only"
 
 
 def test_cli_repair_sandbox_runs_valid_patch(tmp_path, capsys):
@@ -135,7 +137,8 @@ def test_readme_contains_key_sections():
     readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
 
     required_phrases = [
-        "Self-Healing Code RPA Framework",
+        "Self-Healing Code RPA",
+        "code-based RPA Skill Runtime",
         "Quick Start",
         "What This Is Not",
         "Architecture",
@@ -146,14 +149,19 @@ def test_readme_contains_key_sections():
         "CLI Usage",
         "python -m code_rpa doctor",
         "python -m code_rpa demo repair",
+        "python -m code_rpa demo codex-patch",
         "python -m code_rpa skill validate",
+        "python -m code_rpa repair apply",
         "Create a New Skill",
         "Skill Quality Gate",
         "Codex Generate Skill",
         "docs/skill-contract.md",
         "docs/codex-generate-skill.md",
+        "docs/codex-generate-patch.md",
+        "docs/patch-format.md",
         "customer_search_export",
         "Repair Pipeline",
+        "Codex Patch Repair",
         "Rollback",
         "Codex Repo Skill",
         "Current Limitations",

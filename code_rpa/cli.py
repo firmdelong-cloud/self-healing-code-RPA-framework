@@ -69,6 +69,9 @@ def build_parser() -> argparse.ArgumentParser:
     repair_sandbox = repair_sub.add_parser("sandbox")
     repair_sandbox.add_argument("repair_request_path")
     repair_sandbox.add_argument("patch_path")
+    repair_apply = repair_sub.add_parser("apply")
+    repair_apply.add_argument("repair_request_path")
+    repair_apply.add_argument("patch_path")
 
     version_parser = subparsers.add_parser("version")
     version_sub = version_parser.add_subparsers(dest="action")
@@ -83,6 +86,7 @@ def build_parser() -> argparse.ArgumentParser:
     demo_parser = subparsers.add_parser("demo")
     demo_sub = demo_parser.add_subparsers(dest="action")
     demo_sub.add_parser("repair")
+    demo_sub.add_parser("codex-patch")
 
     return parser
 
@@ -135,16 +139,20 @@ def handle_repair(args: argparse.Namespace, project_root: Path) -> int:
             args.patch_path,
             current_skill=skill,
         )
-        if result.is_valid:
-            print("valid")
-            return 0
-        print("invalid")
-        for error in result.errors:
-            print(error)
-        return 1
+        print(json.dumps(result.to_dict(), indent=2))
+        return 0 if result.is_valid else 1
 
     if args.action == "sandbox":
         return run_repair_sandbox(project_root, skill, repair_request, patch, args)
+
+    if args.action == "apply":
+        payload = apply_repair_patch(
+            project_root=project_root,
+            repair_request_path=Path(args.repair_request_path),
+            patch_path=Path(args.patch_path),
+        )
+        print(json.dumps(payload, indent=2))
+        return 0 if payload["success"] else 1
 
     return 1
 
@@ -163,12 +171,11 @@ def run_repair_sandbox(
         current_skill=skill,
     )
     if not validation.is_valid:
-        print("invalid")
-        for error in validation.errors:
-            print(error)
+        print(json.dumps(validation.to_dict(), indent=2))
         return 1
 
-    result = SandboxRunner().run_patch(skill=skill, patch=patch, project_root=project_root)
+    runtime_patch = validator.normalize_for_runtime(repair_request, patch, current_skill=skill)
+    result = SandboxRunner().run_patch(skill=skill, patch=runtime_patch, project_root=project_root)
     payload = {
         "success": result.success,
         "stdout": result.stdout,
@@ -178,6 +185,60 @@ def run_repair_sandbox(
     }
     print(json.dumps(payload, indent=2))
     return 0 if result.success else 1
+
+
+def apply_repair_patch(
+    *,
+    project_root: Path,
+    repair_request_path: Path,
+    patch_path: Path,
+) -> dict[str, Any]:
+    errors: list[str] = []
+    repair_request = read_json(repair_request_path)
+    patch = read_json(patch_path)
+    skill = SkillRegistry(project_root / "example_skills").load(repair_request["skill_id"])
+    validator = PatchValidator()
+    validation = validator.validate_patch(repair_request, patch, current_skill=skill)
+    payload: dict[str, Any] = {
+        "success": False,
+        "validated": validation.is_valid,
+        "sandbox_success": False,
+        "version_id": None,
+        "rerun_status": None,
+        "errors": errors,
+    }
+
+    if not validation.is_valid:
+        errors.extend(validation.errors)
+        return payload
+
+    runtime_patch = validator.normalize_for_runtime(repair_request, patch, current_skill=skill)
+    sandbox_result = SandboxRunner().run_patch(skill=skill, patch=runtime_patch, project_root=project_root)
+    payload["sandbox_success"] = sandbox_result.success
+    if not sandbox_result.success:
+        errors.append("sandbox test failed")
+        if sandbox_result.stderr:
+            errors.append(sandbox_result.stderr)
+        return payload
+
+    version_manager = VersionManager(project_root / "storage" / "versions")
+    version_manager.snapshot(skill, reason="pre_repair_apply")
+    version_dir = version_manager.create_new_version(
+        skill=skill,
+        patched_skill_path=sandbox_result.patched_skill_path,
+        patch=runtime_patch,
+        test_result=sandbox_result,
+    )
+    payload["version_id"] = version_dir.name
+
+    rerun_result = run_skill(project_root, skill.id)
+    payload["rerun_status"] = rerun_result["status"]
+    if rerun_result["status"] != "success":
+        errors.append("rerun failed after applying repair")
+        return payload
+
+    payload["success"] = True
+    return payload
 
 
 def handle_version(args: argparse.Namespace, project_root: Path) -> int:
@@ -219,6 +280,10 @@ def handle_doctor(project_root: Path) -> int:
 def handle_demo(args: argparse.Namespace, project_root: Path) -> int:
     if args.action == "repair":
         payload = run_demo_repair(project_root)
+        print(json.dumps(payload, indent=2))
+        return 0 if payload.get("success") else 1
+    if args.action == "codex-patch":
+        payload = run_demo_codex_patch(project_root)
         print(json.dumps(payload, indent=2))
         return 0 if payload.get("success") else 1
     return 1
@@ -285,6 +350,51 @@ def run_demo_repair(project_root: Path) -> dict[str, Any]:
         "sandbox_success": sandbox_result.success,
         "version_id": version_dir.name,
         "rerun_status": rerun_result.status,
+        "project_copy": str(temp_root),
+    }
+
+
+def run_demo_codex_patch(project_root: Path) -> dict[str, Any]:
+    temp_root = Path(tempfile.mkdtemp(prefix="code_rpa_demo_codex_patch_")) / project_root.name
+    shutil.copytree(
+        project_root,
+        temp_root,
+        ignore=shutil.ignore_patterns(".git", ".venv", ".pytest_cache", "__pycache__", "*.pyc"),
+    )
+    degrade_customer_keyword_selector(temp_root)
+
+    skill_path = temp_root / "example_skills" / "customer_search_export" / "skill.yaml"
+    skill = prepare_customer_skill(temp_root, SkillLoader().load(skill_path))
+    failure_result = RPAExecutor(storage_root=temp_root / "storage").run(skill, page=DemoCustomerPage())
+    if failure_result.status != "failed" or not failure_result.repair_request_path:
+        return {
+            "success": False,
+            "message": "codex patch demo did not produce the expected failure",
+            "project_copy": str(temp_root),
+        }
+
+    repair_request_path = Path(failure_result.repair_request_path)
+    repair_request = read_json(repair_request_path)
+    patch = build_codex_customer_patch(repair_request)
+    patch_path = temp_root / "storage" / "repair_requests" / repair_request["run_id"] / "codex_patch.json"
+    patch_path.write_text(json.dumps(patch, indent=2), encoding="utf-8")
+
+    apply_result = apply_repair_patch(
+        project_root=temp_root,
+        repair_request_path=repair_request_path,
+        patch_path=patch_path,
+    )
+    return {
+        "success": apply_result["success"],
+        "message": "codex patch demo success" if apply_result["success"] else "codex patch demo failed",
+        "failed_step_id": repair_request["failed_step_id"],
+        "repair_request_path": str(repair_request_path),
+        "patch_path": str(patch_path),
+        "validated": apply_result["validated"],
+        "sandbox_success": apply_result["sandbox_success"],
+        "version_id": apply_result["version_id"],
+        "rerun_status": apply_result["rerun_status"],
+        "errors": apply_result["errors"],
         "project_copy": str(temp_root),
     }
 
@@ -554,12 +664,33 @@ def degrade_demo_export_selector(project_root: Path) -> None:
     selectors_path.write_text(yaml.safe_dump(selectors, sort_keys=False), encoding="utf-8")
 
 
+def degrade_customer_keyword_selector(project_root: Path) -> None:
+    selectors_path = project_root / "example_skills" / "customer_search_export" / "selectors.yaml"
+    selectors = yaml.safe_load(selectors_path.read_text(encoding="utf-8")) or {}
+    selectors["customer_keyword_input"] = {
+        "primary": "#missing-customer-keyword",
+        "fallbacks": [],
+    }
+    selectors_path.write_text(yaml.safe_dump(selectors, sort_keys=False), encoding="utf-8")
+
+
 def prepare_demo_skill(project_root: Path, skill: Any) -> Any:
     fixture_url = (project_root / "tests" / "fixtures" / "report_demo.html").resolve().as_uri()
     resolved_steps = []
     for step in skill.steps:
         resolved_step = dict(step)
         if resolved_step.get("url") == "{{REPORT_DEMO_URL}}":
+            resolved_step["url"] = fixture_url
+        resolved_steps.append(resolved_step)
+    return replace(skill, steps=resolved_steps)
+
+
+def prepare_customer_skill(project_root: Path, skill: Any) -> Any:
+    fixture_url = (project_root / "tests" / "fixtures" / "customer_demo.html").resolve().as_uri()
+    resolved_steps = []
+    for step in skill.steps:
+        resolved_step = dict(step)
+        if resolved_step.get("url") == "{{CUSTOMER_DEMO_URL}}":
             resolved_step["url"] = fixture_url
         resolved_steps.append(resolved_step)
     return replace(skill, steps=resolved_steps)
@@ -593,6 +724,29 @@ def build_demo_patch(skill: Any, repair_request: dict[str, Any]) -> dict[str, An
     }
 
 
+def build_codex_customer_patch(repair_request: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "repair_request_id": repair_request["run_id"],
+        "skill_id": repair_request["skill_id"],
+        "failed_step_id": repair_request["failed_step_id"],
+        "scope": "selector_only",
+        "changes": [
+            {
+                "file": "example_skills/customer_search_export/selectors.yaml",
+                "selector_id": "customer_keyword_input",
+                "field": "primary",
+                "old": "#missing-customer-keyword",
+                "new": "#customer-keyword",
+            }
+        ],
+        "rationale": "The failure snapshot shows the keyword input selector changed; restore the primary selector to the stable input id.",
+        "patch_id": "codex-customer-search-export-001",
+        "risk_level": "low",
+        "created_at": repair_request.get("created_at"),
+        "test_command": repair_request.get("test_command", ["python", "-m", "pytest"]),
+    }
+
+
 class DemoRepairPage:
     def __init__(self):
         self.available_selectors = {
@@ -617,6 +771,54 @@ class DemoRepairPage:
             <input id="date-end" />
             <button data-testid="export-button">Export Report</button>
             <p id="export-success">Export ready</p>
+          </body>
+        </html>
+        """
+
+    def goto(self, url):
+        self.url = url
+
+    def click(self, selector):
+        if selector not in self.available_selectors:
+            raise RuntimeError(f"selector not found: {selector}")
+
+    def fill(self, selector, value):
+        if selector not in self.available_selectors:
+            raise RuntimeError(f"selector not found: {selector}")
+
+    def wait_for_selector(self, selector):
+        if selector not in self.available_selectors:
+            raise RuntimeError(f"selector not found: {selector}")
+
+    def screenshot(self, path, full_page=True):
+        Path(path).write_bytes(b"fake screenshot")
+
+    def content(self):
+        return self.html
+
+
+class DemoCustomerPage:
+    def __init__(self):
+        self.available_selectors = {
+            "#customer-keyword",
+            "#search-customers",
+            "#customer-results",
+        }
+        self.url = "about:blank"
+        self.html = """
+        <html>
+          <body>
+            <input id="customer-keyword" />
+            <button id="search-customers">Search</button>
+            <table id="customer-results">
+              <thead>
+                <tr><th>Customer ID</th><th>Name</th><th>Status</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>C-1001</td><td>Acme Logistics</td><td>Active</td></tr>
+                <tr><td>C-1002</td><td>Acme Retail</td><td>Active</td></tr>
+              </tbody>
+            </table>
           </body>
         </html>
         """

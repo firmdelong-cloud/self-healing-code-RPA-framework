@@ -1,6 +1,8 @@
-# patch.json Spec
+# Legacy Runtime patch.json Spec
 
-Phase three supports selector-only patches.
+Current Codex-generated patches should follow `docs/patch-format.md`.
+
+This file documents the legacy runtime patch shape still used internally by `SandboxRunner` and `VersionManager`.
 
 Required fields:
 
@@ -47,4 +49,3 @@ example_skills/web_report_export/selectors.yaml
 - `must_not_touch_runtime`
 
 Reject patches that target `main.py`, `rpa_runtime/`, `repair_agent/`, `skill_registry/`, unrelated steps, or high-risk steps.
-

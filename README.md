@@ -1,14 +1,27 @@
-# Self-Healing Code RPA Framework
+# Self-Healing Code RPA
 
-Self-Healing Code RPA is a Python + Playwright automation framework that runs stable code first and uses local repair artifacts only when deterministic recovery fails.
+Self-Healing Code RPA is a code-based RPA Skill Runtime for building, running, testing, repairing, and versioning browser automation skills.
 
-The current MVP supports selector-level self-healing for Web RPA. A Skill is defined in YAML, executed by the Python runtime, observed on failure, repaired through a constrained `patch.json`, tested in a sandbox, and versioned with rollback support.
+It is designed around a safe self-healing workflow:
+
+1. Generate or create a standardized RPA Skill.
+2. Run the Skill through the runtime.
+3. Capture screenshots, DOM snapshots, URLs, logs, and failed step metadata when execution fails.
+4. Generate a structured `repair_request.json`.
+5. Let Codex or a repair agent propose a selector-only `patch.json`.
+6. Validate the patch with strict safety rules.
+7. Test the patch in an isolated sandbox.
+8. Apply the patch only after validation and tests pass.
+9. Create a new version snapshot.
+10. Support rollback to a previous working version.
+
+The project does not let AI freely rewrite runtime code. AI can propose repairs, but the runtime validates, tests, versions, and applies them safely.
 
 ## Status
 
 This project is an experimental MVP.
 
-Current scope: Web RPA with selector-level self-healing.
+Current scope: Web RPA Skill runtime with Codex-style Skill generation and selector-only patch repair.
 
 It is not ready for production use without additional security review, scheduling, authentication, deployment hardening, and environment-specific approval controls.
 
@@ -36,7 +49,7 @@ python -m pytest
 
 - Python Runtime: runs Skill steps, logs step results, captures failure snapshots.
 - Skill Registry: loads YAML Skills from `example_skills/`.
-- Repair Agent: generates `repair_request.json`, validates selector-only patches.
+- Repair Agent: generates `repair_request.json`, validates selector-only `patch.json`, and gates repair apply.
 - Sandbox: copies the project, applies a patch in isolation, and runs tests.
 - Version Manager: snapshots, creates new versions after passing tests, and rolls back.
 
@@ -52,6 +65,7 @@ The MVP is intentionally narrow:
 - Skill quality validation with `python -m code_rpa skill validate <skill_id>`.
 - Failure screenshots and DOM snapshots.
 - Selector-only repair patches.
+- `repair apply` flow with validate, sandbox, version snapshot, and rerun.
 - Sandbox-tested version updates.
 - Rollback to previous Skill versions.
 
@@ -115,15 +129,19 @@ python -m code_rpa skill create my_new_skill
 python -m code_rpa skill validate my_new_skill
 python -m code_rpa repair validate path\to\repair_request.json path\to\patch.json
 python -m code_rpa repair sandbox path\to\repair_request.json path\to\patch.json
+python -m code_rpa repair apply path\to\repair_request.json path\to\patch.json
 python -m code_rpa version list web_report_export
 python -m code_rpa version rollback web_report_export <version_id>
 python -m code_rpa doctor
 python -m code_rpa demo repair
+python -m code_rpa demo codex-patch
 ```
 
 `doctor` prints structured checks for Python, Playwright, pytest, project directories, and Skill registry loading.
 
 `demo repair` runs a local selector repair demonstration in a temporary project copy: it forces a selector failure, generates a repair request, applies a mock selector patch in the sandbox, creates a new version, and reruns the Skill.
+
+`demo codex-patch` simulates Codex-generated selector repair without calling an LLM API.
 
 ## Repair Pipeline
 
@@ -136,6 +154,34 @@ The repair pipeline is local, selector-only, and test-gated:
 5. Apply the patch only inside `SandboxRunner`.
 6. Run the patch test command inside the sandbox.
 7. Apply a new version with `VersionManager` only after tests pass.
+
+Core flow:
+
+```text
+Skill Run
+  ↓
+Step Failed
+  ↓
+Observer captures screenshot / DOM / URL / logs
+  ↓
+repair_request.json
+  ↓
+Codex proposes selector-only patch.json
+  ↓
+patch_validator
+  ↓
+sandbox_runner
+  ↓
+pytest passes
+  ↓
+Apply patch
+  ↓
+Create version snapshot
+  ↓
+Rerun Skill
+  ↓
+Success or rollback
+```
 
 ## repair_request.json
 
@@ -157,32 +203,44 @@ The request is for repair planning only. It does not call an LLM.
 
 ## patch.json
 
-`patch.json` is the proposed local repair. Phase three only allows selector-level patches:
-
-- `selector_update`
-- `fallback_selector_add`
+`patch.json` is the proposed local repair. Current automated repair only allows selector-level patches.
 
 Required fields include:
 
-- `patch_id`
+- `repair_request_id`
 - `skill_id`
-- `skill_name`
-- `base_version`
-- `target_step_id`
-- `patch_type`
-- `selector_changes`
-- `code_changes: null`
-- `allowed_repair_scope`
-- `reason`
-- `risk_level`
-- `test_command`
-- `created_at`
+- `failed_step_id`
+- `scope: selector_only`
+- `changes`
+- `rationale`
 
-`selector_changes.target_file` must be a full repository-relative path such as:
+Each change must target the failed step's selector in the current Skill's `selectors.yaml`:
 
 ```text
 example_skills/web_report_export/selectors.yaml
 ```
+
+See `docs/patch-format.md` for the full format.
+
+## Codex Patch Repair
+
+Codex patch repair is a constrained local workflow:
+
+1. Read `repair_request.json`.
+2. Inspect the DOM snapshot and screenshot.
+3. Generate only `patch.json`.
+4. Run:
+
+```powershell
+python -m code_rpa repair validate <repair_request_path> <patch_path>
+python -m code_rpa repair sandbox <repair_request_path> <patch_path>
+python -m code_rpa repair apply <repair_request_path> <patch_path>
+python -m pytest
+```
+
+Codex must not directly modify Skill files, runtime code, tests, README, requirements, or AGENTS files during patch generation.
+
+See `docs/codex-generate-patch.md`.
 
 ## Sandbox Testing
 
@@ -281,6 +339,7 @@ It teaches future Codex runs to follow this framework's rules: no LLM calls duri
 - Web RPA only.
 - Selector-level repair only.
 - Phase five focuses on Skill quality gates and Codex Skill generation, not new automation surfaces.
+- Phase six focuses on Codex-style selector-only patch repair, not LLM API integration.
 - No Web UI.
 - No real website integration.
 - No desktop RPA.

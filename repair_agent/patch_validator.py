@@ -13,6 +13,24 @@ class PatchValidationResult:
     is_valid: bool
     reason: str
     errors: list[str] = field(default_factory=list)
+    changed_files: list[str] = field(default_factory=list)
+    patch_scope: str = "selector_only"
+
+    @property
+    def allowed(self) -> bool:
+        return self.is_valid
+
+    @property
+    def reasons(self) -> list[str]:
+        return self.errors
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "allowed": self.allowed,
+            "reasons": self.reasons,
+            "changed_files": self.changed_files,
+            "patch_scope": self.patch_scope,
+        }
 
 
 class PatchValidator:
@@ -28,7 +46,19 @@ class PatchValidator:
         "selector_resolver.py",
         "logger.py",
         "retry_policy.py",
+        "README.md",
+        "requirements.txt",
+        "AGENTS.md",
     }
+    PROTECTED_PATH_SEGMENTS = {
+        "rpa_runtime",
+        "repair_agent",
+        "skill_registry",
+        "tests",
+        "docs",
+        ".agents",
+    }
+    CODEX_PATCH_FIELDS = {"repair_request_id", "skill_id", "failed_step_id", "scope", "changes", "rationale"}
 
     def validate_patch_file(
         self,
@@ -48,6 +78,9 @@ class PatchValidator:
         *,
         current_skill: Any | None = None,
     ) -> PatchValidationResult:
+        if self._is_codex_style_patch(patch):
+            return self._validate_codex_style_patch(repair_request, patch, current_skill=current_skill)
+
         errors: list[str] = []
 
         failed_step_id = repair_request.get("failed_step_id")
@@ -137,9 +170,62 @@ class PatchValidator:
                 errors=errors,
             )
 
+        changed_files = []
+        if isinstance(selector_changes, dict) and isinstance(selector_changes.get("target_file"), str):
+            changed_files.append(selector_changes["target_file"].replace("\\", "/"))
+
         if errors:
-            return PatchValidationResult(False, "Patch validation failed", errors)
-        return PatchValidationResult(True, "Patch is safe to sandbox")
+            return PatchValidationResult(False, "Patch validation failed", errors, changed_files=changed_files)
+        return PatchValidationResult(True, "Patch is safe to sandbox", changed_files=changed_files)
+
+    def normalize_for_runtime(
+        self,
+        repair_request: dict[str, Any],
+        patch: dict[str, Any],
+        *,
+        current_skill: Any | None = None,
+    ) -> dict[str, Any]:
+        """Convert a validated patch to the runtime patch shape used by SandboxRunner."""
+        if not self._is_codex_style_patch(patch):
+            return patch
+
+        validation = self._validate_codex_style_patch(repair_request, patch, current_skill=current_skill)
+        if not validation.is_valid:
+            raise ValueError(f"Cannot normalize invalid patch: {validation.errors}")
+
+        changes = patch["changes"]
+        first_change = changes[0]
+        field_name = first_change["field"]
+        normalized: dict[str, Any] = {
+            "patch_id": patch.get("patch_id") or patch.get("repair_request_id") or repair_request.get("run_id"),
+            "skill_id": patch["skill_id"],
+            "skill_name": repair_request.get("skill_name"),
+            "base_version": repair_request.get("skill_version"),
+            "target_step_id": patch["failed_step_id"],
+            "code_changes": None,
+            "reason": patch.get("rationale", ""),
+            "risk_level": str(patch.get("risk_level", "low")).lower(),
+            "test_command": repair_request.get("test_command") or ["python", "-m", "pytest"],
+            "allowed_repair_scope": repair_request.get("allowed_repair_scope", {}),
+            "created_at": patch.get("created_at") or repair_request.get("created_at"),
+        }
+
+        selector_changes = {
+            "target_file": first_change["file"].replace("\\", "/"),
+            "selector_ref": first_change["selector_id"],
+        }
+        if field_name == "primary":
+            normalized["patch_type"] = "selector_update"
+            selector_changes["new_primary"] = first_change["new"]
+        elif field_name == "fallbacks":
+            if isinstance(first_change["new"], list):
+                normalized["patch_type"] = "selector_update"
+                selector_changes["new_fallbacks"] = first_change["new"]
+            else:
+                normalized["patch_type"] = "fallback_selector_add"
+                selector_changes["add_fallbacks"] = [first_change["new"]]
+        normalized["selector_changes"] = selector_changes
+        return normalized
 
     def _validate_selector_changes(
         self,
@@ -169,9 +255,7 @@ class PatchValidator:
         if normalized_target not in expected_allowed_files:
             errors.append("selector_changes.target_file must be present in allowed_repair_scope.allowed_files")
 
-        if normalized_target.endswith("/main.py") or any(
-            segment in normalized_target.split("/") for segment in ("rpa_runtime", "repair_agent", "skill_registry")
-        ):
+        if self._is_protected_target(normalized_target):
             errors.append("selector_changes.target_file must not touch runtime or repair framework code")
 
         raw_target = Path(normalized_target)
@@ -223,6 +307,124 @@ class PatchValidator:
         patch_refs = sorted(patch_scope.get("allowed_selector_refs", []) or [])
         if patch_refs != repair_refs:
             errors.append("allowed_repair_scope.allowed_selector_refs must match repair_request")
+
+    def _validate_codex_style_patch(
+        self,
+        repair_request: dict[str, Any],
+        patch: dict[str, Any],
+        *,
+        current_skill: Any | None = None,
+    ) -> PatchValidationResult:
+        errors: list[str] = []
+        expected_skill_id = repair_request.get("skill_id")
+        expected_failed_step_id = repair_request.get("failed_step_id")
+        expected_repair_request_id = repair_request.get("repair_request_id") or repair_request.get("run_id")
+        allowed_scope = repair_request.get("allowed_repair_scope", {}) or {}
+        expected_allowed_files = set(allowed_scope.get("allowed_files", []) or [])
+        expected_selector_refs = set(allowed_scope.get("allowed_selector_refs", []) or [])
+        changed_files: list[str] = []
+
+        missing = sorted(field for field in self.CODEX_PATCH_FIELDS if field not in patch)
+        if missing:
+            errors.append(f"patch is missing required fields: {missing}")
+
+        if patch.get("repair_request_id") != expected_repair_request_id:
+            errors.append("repair_request_id must match repair_request.run_id")
+        if patch.get("skill_id") != expected_skill_id:
+            errors.append("skill_id must match repair_request.skill_id")
+        if patch.get("failed_step_id") != expected_failed_step_id:
+            errors.append("failed_step_id must match repair_request.failed_step_id")
+        if patch.get("scope") != "selector_only":
+            errors.append("scope must be selector_only")
+        if current_skill is not None and patch.get("skill_id") != current_skill.id:
+            errors.append("skill_id must match the current skill")
+        if not isinstance(patch.get("rationale"), str) or not patch.get("rationale"):
+            errors.append("rationale is required")
+
+        changes = patch.get("changes")
+        if not isinstance(changes, list) or not changes:
+            errors.append("changes must be a non-empty list")
+            changes = []
+        elif len(changes) != 1:
+            errors.append("phase six supports exactly one selector change per patch")
+
+        for index, change in enumerate(changes):
+            if not isinstance(change, dict):
+                errors.append(f"changes[{index}] must be an object")
+                continue
+            self._validate_codex_change(
+                change,
+                index=index,
+                expected_allowed_files=expected_allowed_files,
+                expected_selector_refs=expected_selector_refs,
+                changed_files=changed_files,
+                errors=errors,
+            )
+
+        if errors:
+            return PatchValidationResult(False, "Patch validation failed", errors, changed_files=sorted(set(changed_files)))
+        return PatchValidationResult(True, "Patch is safe to sandbox", changed_files=sorted(set(changed_files)))
+
+    def _validate_codex_change(
+        self,
+        change: dict[str, Any],
+        *,
+        index: int,
+        expected_allowed_files: set[str],
+        expected_selector_refs: set[str],
+        changed_files: list[str],
+        errors: list[str],
+    ) -> None:
+        required = {"file", "selector_id", "field", "old", "new"}
+        missing = sorted(field for field in required if field not in change)
+        if missing:
+            errors.append(f"changes[{index}] is missing required fields: {missing}")
+
+        target_file = change.get("file")
+        if not isinstance(target_file, str):
+            errors.append(f"changes[{index}].file must be a string")
+            return
+        normalized_target = target_file.replace("\\", "/")
+        changed_files.append(normalized_target)
+
+        if Path(normalized_target).is_absolute():
+            errors.append(f"changes[{index}].file must be repository-relative")
+        if normalized_target == "selectors.yaml":
+            errors.append(f"changes[{index}].file must be a full relative selectors.yaml path")
+        if normalized_target not in expected_allowed_files:
+            errors.append(f"changes[{index}].file must be one of {sorted(expected_allowed_files)}")
+        if self._is_protected_target(normalized_target):
+            errors.append(f"changes[{index}].file must not target protected code, tests, or docs")
+        if not normalized_target.endswith("/selectors.yaml"):
+            errors.append(f"changes[{index}].file must target selectors.yaml")
+
+        selector_id = change.get("selector_id")
+        if selector_id not in expected_selector_refs:
+            errors.append(f"changes[{index}].selector_id must be in {sorted(expected_selector_refs)}")
+
+        field_name = change.get("field")
+        if field_name not in {"primary", "fallbacks"}:
+            errors.append(f"changes[{index}].field must be primary or fallbacks")
+        elif field_name == "primary" and not isinstance(change.get("new"), str):
+            errors.append(f"changes[{index}].new must be a string when field is primary")
+        elif field_name == "fallbacks":
+            new_value = change.get("new")
+            if not isinstance(new_value, (str, list)):
+                errors.append(f"changes[{index}].new must be a string or list when field is fallbacks")
+            elif isinstance(new_value, list) and not all(isinstance(item, str) for item in new_value):
+                errors.append(f"changes[{index}].new fallback entries must be strings")
+
+    def _is_codex_style_patch(self, patch: dict[str, Any]) -> bool:
+        return "changes" in patch or "scope" in patch or "failed_step_id" in patch
+
+    def _is_protected_target(self, normalized_target: str) -> bool:
+        parts = normalized_target.split("/")
+        name = Path(normalized_target).name
+        if name in self.PROTECTED_FILE_NAMES:
+            return True
+        if name.endswith(".py") or name.startswith("README") or name.startswith("requirements"):
+            return True
+        return any(segment in self.PROTECTED_PATH_SEGMENTS for segment in parts)
 
     def _read_json(self, path: str | Path) -> dict[str, Any]:
         with Path(path).open("r", encoding="utf-8") as file:

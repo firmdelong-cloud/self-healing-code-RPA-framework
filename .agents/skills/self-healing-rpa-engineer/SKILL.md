@@ -22,6 +22,7 @@ Use this skill when working inside this repository on RPA Skills or selector-lev
 - Every Skill must include pytest coverage.
 - Do not bypass safety checks, logs, snapshots, sandbox tests, or versioning.
 - Do not modify `rpa_runtime/`, `repair_agent/`, or `skill_registry/` when the task is only to create a new Skill.
+- When repairing a failed Skill, generate `patch.json` first; do not directly edit Skill files.
 
 ## Workflow
 
@@ -29,9 +30,10 @@ Use this skill when working inside this repository on RPA Skills or selector-lev
 2. For architecture context, read `references/architecture.md`.
 3. For creating or updating a Skill, read `references/rpa-skill-spec.md` and use the templates in `assets/`.
 4. For natural-language Skill generation, read `docs/codex-generate-skill.md`.
-5. For patch work, read `references/patch-json-spec.md`.
-6. For repair flow or rollback work, read `references/repair-pipeline.md`.
-7. Run the quality gate after changes.
+5. For Codex-style patch generation, read `docs/patch-format.md` and `docs/codex-generate-patch.md`.
+6. For patch work, read `references/patch-json-spec.md`.
+7. For repair flow or rollback work, read `references/repair-pipeline.md`.
+8. Run the quality gate after changes.
 
 ## Skill Creation
 
@@ -82,3 +84,23 @@ Forbidden repair targets:
 - `skill_registry/`
 - unrelated steps
 - high-risk steps
+
+## Patch Generation
+
+When the user asks to repair a failed Skill:
+
+1. Read the provided `repair_request.json`.
+2. Inspect the referenced DOM snapshot and screenshot when available.
+3. Identify only the selector for `failed_step_id`.
+4. Generate a selector-only `patch.json` using `docs/patch-format.md`.
+5. Do not directly modify `selectors.yaml`, `main.py`, runtime code, tests, README, requirements, or AGENTS files.
+6. Run:
+
+```powershell
+python -m code_rpa repair validate <repair_request_path> <patch_path>
+python -m code_rpa repair sandbox <repair_request_path> <patch_path>
+python -m code_rpa repair apply <repair_request_path> <patch_path>
+python -m pytest
+```
+
+Only report success after validation, sandbox, apply, rerun, and pytest pass.
