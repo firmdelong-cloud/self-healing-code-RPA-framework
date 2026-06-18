@@ -7,6 +7,8 @@ from pathlib import Path
 import re
 from typing import Any
 
+from vision_runtime import WeChatVision
+
 
 class DesktopRuntimeError(RuntimeError):
     """Raised when the desktop runtime cannot operate the target window."""
@@ -124,6 +126,8 @@ class LiveWechatWindow:
 
     def __init__(self, window: Any):
         self.window = window
+        self.vision = WeChatVision()
+        self._last_contact_hint: dict[str, Any] | None = None
 
     @property
     def url(self) -> str:
@@ -135,21 +139,41 @@ class LiveWechatWindow:
     def detect_unread(self, selector: str) -> dict[str, Any]:
         contact = self._find_unread_contact()
         if contact is None:
+            contact = self.vision.find_unread_contact(self.window)
+        if contact is None:
+            contact = self.vision.find_active_contact(self.window)
+        if contact is None:
             raise DesktopRuntimeError("no unread WeChat conversation found")
+        self._last_contact_hint = contact
         return contact
 
     def click_chat(self, selector: str) -> dict[str, Any]:
-        contact = self._find_unread_contact()
-        if contact is None or contact.get("_element") is None:
+        contact = self._last_contact_hint or self._find_unread_contact()
+        if contact is None:
+            contact = self.vision.find_unread_contact(self.window) or self.vision.find_active_contact(self.window)
+        if contact is None:
             raise DesktopRuntimeError("no unread WeChat conversation available to open")
-        element = contact["_element"]
-        element.click_input()
+
+        if contact.get("_element") is not None:
+            element = contact["_element"]
+            element.click_input()
+        elif contact.get("click_point") is not None:
+            from pywinauto import mouse
+
+            click_x, click_y = contact["click_point"]
+            rect = self.window.rectangle()
+            mouse.click(coords=(int(rect.left + click_x), int(rect.top + click_y)))
         return {
             "contact_name": contact["contact_name"],
             "is_group_chat": contact["is_group_chat"],
         }
 
     def read_chat_text(self, selector: str) -> str:
+        try:
+            return self.vision.read_latest_incoming_message(self.window)
+        except Exception:
+            pass
+
         texts = [
             element.window_text().strip()
             for element in self.window.descendants(control_type="Text")
@@ -160,16 +184,23 @@ class LiveWechatWindow:
         return texts[-1]
 
     def fill_text(self, selector: str, value: str) -> None:
-        editor = self._find_editor()
-        editor.set_focus()
-        editor.set_edit_text(str(value))
+        try:
+            editor = self._find_editor()
+            editor.set_focus()
+            editor.set_edit_text(str(value))
+            return
+        except Exception:
+            self.vision.fill_reply_text(self.window, str(value))
 
     def send_message(self, selector: str) -> bool:
-        button = self.window.child_window(title_re="发送|Send", control_type="Button")
-        if not button.exists():
-            raise DesktopRuntimeError("send button not found in WeChat window")
-        button.click_input()
-        return True
+        try:
+            button = self.window.child_window(title_re="发送|Send", control_type="Button")
+            if button.exists():
+                button.click_input()
+                return True
+        except Exception:
+            pass
+        return self.vision.click_send(self.window)
 
     def screenshot(self, path: str) -> None:
         image = self.window.capture_as_image()
@@ -180,7 +211,7 @@ class LiveWechatWindow:
         return "\n".join(texts)
 
     def state(self) -> dict[str, Any]:
-        contact = self._find_unread_contact()
+        contact = self._last_contact_hint or self._find_unread_contact() or self.vision.find_active_contact(self.window)
         return {
             "url": self.url,
             "current_contact": contact["contact_name"] if contact else "",

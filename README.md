@@ -257,6 +257,7 @@ The repository now includes a Desktop Message RPA runtime aimed at safe chat aut
 
 - `desktop_runtime/` handles window discovery, unread detection, chat reading, input filling, sending, and screenshot capture on failure.
 - `message_runtime/` handles message parsing, rule-based intent classification, reply generation, safety checks, auto-send policy decisions, and conversation logging.
+- `vision_runtime/` adds screenshot-based region detection plus OCR fallback for Qt-style WeChat windows that expose very little UI Automation structure.
 - `example_skills/wechat_auto_reply_mock/` provides the first end-to-end desktop message Skill.
 
 Example:
@@ -281,6 +282,8 @@ Sample output:
 ```
 
 For local development, the repo uses `tests/fixtures/wechat_mock.html`. For live Windows experiments, the desktop runtime also includes a best-effort `desktop_wechat` adapter that targets the visible official WeChat client through UI Automation. It does not use protocol reverse engineering, hook injection, or hidden control paths.
+
+When the official WeChat client exposes too little UI Automation data, the live adapter can fall back to a visual path built on `opencv-python` and `rapidocr-onnxruntime`: it captures only the bound WeChat window, looks for unread badges or the active conversation row, OCRs the chat pane, and pastes replies into the editor through the visible client.
 
 To run the live desktop Skill:
 
@@ -422,6 +425,7 @@ It teaches future Codex runs to follow this framework's rules: no LLM calls duri
 - No production scheduler or deployment hardening.
 - The live WeChat desktop adapter is best-effort and environment-specific; repeatable tests still run on the mock fixture.
 - Some Weixin desktop builds expose only a minimal Qt accessibility tree, which can block unread detection and message reading without OCR, injection, or protocol-level access.
+- The vision fallback depends on the WeChat window being visible, foregrounded, and laid out close to the expected desktop proportions.
 
 ## Safety Boundaries
 

@@ -279,7 +279,13 @@ def handle_desktop(args: argparse.Namespace, project_root: Path) -> int:
         return 1
 
     if args.action == "simulate":
-        result = run_desktop_skill(project_root, args.skill_id, scenario=getattr(args, "scenario", "price"))
+        simulate_storage = Path(tempfile.mkdtemp(prefix="code_rpa_desktop_simulate_"))
+        result = run_desktop_skill(
+            project_root,
+            args.skill_id,
+            scenario=getattr(args, "scenario", "price"),
+            storage_root=simulate_storage,
+        )
         payload = {"status": result["status"], **result["outputs"]}
         print(json.dumps(payload, indent=2, ensure_ascii=False))
         return 0 if result["status"] == "success" else 1
@@ -486,9 +492,15 @@ def run_skill(project_root: Path, skill_id: str) -> dict[str, Any]:
     return result.to_dict()
 
 
-def run_desktop_skill(project_root: Path, skill_id: str, *, scenario: str = "price") -> dict[str, Any]:
+def run_desktop_skill(
+    project_root: Path,
+    skill_id: str,
+    *,
+    scenario: str = "price",
+    storage_root: Path | None = None,
+) -> dict[str, Any]:
     module = load_skill_main(project_root, skill_id)
-    result = module.run(storage_root=project_root / "storage", scenario=scenario)
+    result = module.run(storage_root=storage_root or project_root / "storage", scenario=scenario)
     return result.to_dict()
 
 
