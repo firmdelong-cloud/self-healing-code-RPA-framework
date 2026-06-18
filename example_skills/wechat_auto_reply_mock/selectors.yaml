@@ -1,0 +1,20 @@
+unread_chat_item:
+  primary: ".contact-item.unread"
+  fallbacks:
+    - ".contact-item[data-unread-count='1']"
+    - "#contact-list .contact-item:first-child"
+
+latest_incoming_message:
+  primary: "#chat-history .message.incoming .message-text"
+  fallbacks:
+    - "#chat-history .message .message-text"
+
+reply_input:
+  primary: "#reply-box"
+  fallbacks:
+    - "textarea"
+
+send_button:
+  primary: "#send-button"
+  fallbacks:
+    - "button"

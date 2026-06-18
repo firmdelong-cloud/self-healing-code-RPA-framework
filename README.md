@@ -21,7 +21,7 @@ The project does not let AI freely rewrite runtime code. AI can propose repairs,
 
 This project is an experimental MVP.
 
-Current scope: Web RPA Skill runtime with Codex-style Skill generation and selector-only patch repair.
+Current scope: Web RPA Skill runtime plus Desktop Message RPA with Codex-style Skill generation and selector-only patch repair.
 
 It is not ready for production use without additional security review, scheduling, authentication, deployment hardening, and environment-specific approval controls.
 
@@ -43,24 +43,31 @@ python -m pytest
 - Not a traditional visual RPA designer.
 - Not a full AI Agent that continuously controls the browser.
 - Not a framework that calls an LLM during normal execution.
-- Not a desktop RPA, OCR, scheduling, or real-website integration layer yet.
+- Not a protocol-reverse-engineering or hook-based automation stack.
+- Not a multi-instance control, batch marketing, or friend-growth automation tool.
+- Not a hidden runtime that bypasses desktop safety prompts.
+- Not an OCR, scheduling, or real-website integration layer beyond the local examples in this repo.
 
 ## Architecture
 
 - Python Runtime: runs Skill steps, logs step results, captures failure snapshots.
+- Desktop Message Runtime: reads desktop chat state, classifies intent, generates controlled replies, and applies auto-send policy.
 - Skill Registry: loads YAML Skills from `example_skills/`.
 - Repair Agent: generates `repair_request.json`, validates selector-only `patch.json`, and gates repair apply.
 - Sandbox: copies the project, applies a patch in isolation, and runs tests.
 - Version Manager: snapshots, creates new versions after passing tests, and rolls back.
+- Desktop Message RPA: mock WeChat fixture plus a best-effort Windows UI Automation adapter for the official client.
 
 ## MVP Scope
 
 The MVP is intentionally narrow:
 
 - Web RPA with Playwright.
+- Desktop Message RPA with a mock WeChat window and controlled auto-send policy.
 - `skill.yaml` workflow definitions.
 - `selectors.yaml` primary and fallback selectors.
 - Generic Web steps: `goto`, `click`, `fill`, `select`, `wait_for`, `extract_text`, `extract_table`, `download_file`, `assert_text`, `assert_url`, and `screenshot`.
+- Desktop message steps: `open_window`, `detect_unread`, `click_chat`, `read_chat_text`, `classify_intent`, `generate_reply`, `safety_check`, `auto_send_policy`, `fill_text`, and `send_message`.
 - Structured Skill outputs through `RunResult.outputs`.
 - Skill quality validation with `python -m code_rpa skill validate <skill_id>`.
 - Failure screenshots and DOM snapshots.
@@ -84,14 +91,18 @@ If `python` is not on PATH, use the installed Python executable directly.
 
 ```powershell
 python -m code_rpa skill run web_report_export
+python -m code_rpa desktop simulate wechat_auto_reply_mock
 ```
 
-The demo uses `tests/fixtures/report_demo.html`, logs in, opens the report page, selects a date range, exports the report, and verifies the success message.
+The web demo uses `tests/fixtures/report_demo.html`, logs in, opens the report page, selects a date range, exports the report, and verifies the success message.
 
-You can also run the Skill entrypoint directly:
+The desktop demo uses `tests/fixtures/wechat_mock.html`, detects an unread chat, reads the latest message, classifies the intent, generates a reply, applies the auto-send policy, and sends only when allowed.
+
+You can also run the Skill entrypoints directly:
 
 ```powershell
 python example_skills\web_report_export\main.py
+python example_skills\wechat_auto_reply_mock\main.py
 ```
 
 Additional example Skills:
@@ -100,6 +111,8 @@ Additional example Skills:
 - `scrape_table_to_csv`: extracts a local HTML table, saves CSV output, and returns `table_rows` plus `csv_path`.
 - `form_submit_workflow`: fills a local form fixture, submits it, and verifies success text.
 - `customer_search_export`: searches customer records, exports the result table to CSV, and returns `csv_path` plus `table_rows`.
+- `wechat_auto_reply_mock`: opens a mock WeChat desktop window, detects unread messages, classifies intent, generates a reply, and auto-sends only when policy allows it.
+- `wechat_auto_reply_live`: attaches to the visible official WeChat desktop client through Windows UI Automation and runs the same controlled reply flow with auto-send off by default.
 
 ## Run Tests
 
@@ -113,7 +126,7 @@ Run only unit tests:
 python -m pytest -m "not integration"
 ```
 
-Run the real Chromium integration test:
+Run the real Chromium integration test set:
 
 ```powershell
 python -m pytest -m integration
@@ -124,6 +137,7 @@ python -m pytest -m integration
 ```powershell
 python -m code_rpa skill list
 python -m code_rpa skill run web_report_export
+python -m code_rpa skill run wechat_auto_reply_live
 python -m code_rpa skill test web_report_export
 python -m code_rpa skill create my_new_skill
 python -m code_rpa skill validate my_new_skill
@@ -132,6 +146,8 @@ python -m code_rpa repair sandbox path\to\repair_request.json path\to\patch.json
 python -m code_rpa repair apply path\to\repair_request.json path\to\patch.json
 python -m code_rpa version list web_report_export
 python -m code_rpa version rollback web_report_export <version_id>
+python -m code_rpa desktop simulate wechat_auto_reply_mock
+python -m code_rpa desktop test wechat_auto_reply_mock
 python -m code_rpa doctor
 python -m code_rpa demo repair
 python -m code_rpa demo codex-patch
@@ -142,6 +158,10 @@ python -m code_rpa demo codex-patch
 `demo repair` runs a local selector repair demonstration in a temporary project copy: it forces a selector failure, generates a repair request, applies a mock selector patch in the sandbox, creates a new version, and reruns the Skill.
 
 `demo codex-patch` simulates Codex-generated selector repair without calling an LLM API.
+
+`desktop simulate wechat_auto_reply_mock` runs the mock WeChat chat flow and prints a concise JSON summary.
+
+`desktop test wechat_auto_reply_mock` runs the pytest coverage for the desktop message Skill.
 
 ## Repair Pipeline
 
@@ -159,28 +179,17 @@ Core flow:
 
 ```text
 Skill Run
-  ↓
-Step Failed
-  ↓
-Observer captures screenshot / DOM / URL / logs
-  ↓
-repair_request.json
-  ↓
-Codex proposes selector-only patch.json
-  ↓
-patch_validator
-  ↓
-sandbox_runner
-  ↓
-pytest passes
-  ↓
-Apply patch
-  ↓
-Create version snapshot
-  ↓
-Rerun Skill
-  ↓
-Success or rollback
+  -> Step Failed
+  -> Observer captures screenshot / DOM / URL / logs
+  -> repair_request.json
+  -> Codex proposes selector-only patch.json
+  -> patch_validator
+  -> sandbox_runner
+  -> pytest passes
+  -> Apply patch
+  -> Create version snapshot
+  -> Rerun Skill
+  -> Success or rollback
 ```
 
 ## repair_request.json
@@ -241,6 +250,73 @@ python -m pytest
 Codex must not directly modify Skill files, runtime code, tests, README, requirements, or AGENTS files during patch generation.
 
 See `docs/codex-generate-patch.md`.
+
+## Desktop Message RPA
+
+The repository now includes a Desktop Message RPA runtime aimed at safe chat automation.
+
+- `desktop_runtime/` handles window discovery, unread detection, chat reading, input filling, sending, and screenshot capture on failure.
+- `message_runtime/` handles message parsing, rule-based intent classification, reply generation, safety checks, auto-send policy decisions, and conversation logging.
+- `example_skills/wechat_auto_reply_mock/` provides the first end-to-end desktop message Skill.
+
+Example:
+
+```powershell
+python -m code_rpa desktop simulate wechat_auto_reply_mock
+```
+
+Sample output:
+
+```json
+{
+  "status": "success",
+  "contact_name": "客户A",
+  "latest_message": "你好，多少钱？",
+  "intent": "price_inquiry",
+  "reply_text": "您好，具体价格需要看您选择的产品规格，我可以先发您一份报价参考。",
+  "auto_send_allowed": true,
+  "sent": true,
+  "handoff_required": false
+}
+```
+
+For local development, the repo uses `tests/fixtures/wechat_mock.html`. For live Windows experiments, the desktop runtime also includes a best-effort `desktop_wechat` adapter that targets the visible official WeChat client through UI Automation. It does not use protocol reverse engineering, hook injection, or hidden control paths.
+
+To run the live desktop Skill:
+
+```powershell
+python -m code_rpa skill validate wechat_auto_reply_live
+python -m code_rpa skill run wechat_auto_reply_live
+```
+
+If your WeChat window title differs, set:
+
+```powershell
+$env:WECHAT_WINDOW_TITLE_REGEX = "微信|WeChat"
+python -m code_rpa skill run wechat_auto_reply_live
+```
+
+The live Skill keeps `auto_send: false` by default so you can verify the window binding and draft filling path before enabling unattended sending in a controlled environment.
+
+## Auto-Send Policy
+
+Desktop message Skills are intentionally constrained.
+
+- High-risk intents such as `refund_dispute`, `legal_issue`, `payment_sensitive`, and `complaint` are blocked from unattended sending.
+- Group chats can be blocked by policy.
+- Per-contact and global hourly reply limits are enforced through `ConversationLogger`.
+- When policy blocks a message, the runtime keeps the generated reply as a draft path for handoff and returns `sent=false` with `handoff_required=true`.
+
+## Unsupported Desktop Behaviors
+
+The Desktop Message RPA runtime does not support:
+
+- WeChat protocol reverse engineering
+- hook or code injection into the client
+- multi-instance control or mass orchestration
+- batch friend adds
+- batch marketing or group spam
+- stealth execution or wind-control bypass
 
 ## Sandbox Testing
 
@@ -314,7 +390,7 @@ When asking Codex to generate a new Skill, describe the business workflow, local
 
 Read the full guide at `docs/codex-generate-skill.md`.
 
-Codex must not modify runtime core code by default, bypass `selector_resolver`, write absolute local paths, skip pytest, call an LLM API, add Web UI, connect real websites, add OCR, or add desktop RPA.
+Codex must not modify runtime core code by default, bypass `selector_resolver`, write absolute local paths, skip pytest, call an LLM API, add Web UI, connect real websites, add OCR, or add desktop RPA surfaces that bypass the desktop safety model.
 
 Example target:
 
@@ -336,17 +412,15 @@ It teaches future Codex runs to follow this framework's rules: no LLM calls duri
 
 ## Current Limitations
 
-- Web RPA only.
+- Web RPA plus controlled Desktop Message RPA.
 - Selector-level repair only.
-- Phase five focuses on Skill quality gates and Codex Skill generation, not new automation surfaces.
-- Phase six focuses on Codex-style selector-only patch repair, not LLM API integration.
 - No Web UI.
 - No real website integration.
-- No desktop RPA.
 - No OCR RPA.
 - No LLM API integration.
 - No automatic Python code patching.
 - No production scheduler or deployment hardening.
+- The live WeChat desktop adapter is best-effort and environment-specific; repeatable tests still run on the mock fixture.
 
 ## Safety Boundaries
 
@@ -357,6 +431,7 @@ It teaches future Codex runs to follow this framework's rules: no LLM calls duri
 - High-risk steps must require human confirmation.
 - High-risk patches are rejected for automatic application.
 - Secrets, passwords, tokens, cookies, and session data must not be written to logs or repair requests.
+- Desktop message automation must not use protocol reverse engineering, hook injection, stealth execution, or bulk marketing behavior.
 
 ## License
 

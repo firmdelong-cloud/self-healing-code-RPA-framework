@@ -1,0 +1,19 @@
+unread_chat_item:
+  primary: "wechat://unread_chat_item"
+  fallbacks:
+    - "wechat://conversation_list_item"
+
+latest_incoming_message:
+  primary: "wechat://latest_incoming_message"
+  fallbacks:
+    - "wechat://chat_text"
+
+reply_input:
+  primary: "wechat://reply_input"
+  fallbacks:
+    - "wechat://editor"
+
+send_button:
+  primary: "wechat://send_button"
+  fallbacks:
+    - "wechat://send"

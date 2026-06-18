@@ -35,6 +35,8 @@ def main(argv: list[str] | None = None) -> int:
         return handle_repair(args, project_root)
     if args.group == "version":
         return handle_version(args, project_root)
+    if args.group == "desktop":
+        return handle_desktop(args, project_root)
     if args.group == "doctor":
         return handle_doctor(project_root)
     if args.group == "demo":
@@ -80,6 +82,14 @@ def build_parser() -> argparse.ArgumentParser:
     version_rollback = version_sub.add_parser("rollback")
     version_rollback.add_argument("skill_id")
     version_rollback.add_argument("version_id")
+
+    desktop_parser = subparsers.add_parser("desktop")
+    desktop_sub = desktop_parser.add_subparsers(dest="action")
+    desktop_simulate = desktop_sub.add_parser("simulate")
+    desktop_simulate.add_argument("skill_id")
+    desktop_simulate.add_argument("--scenario", default="price")
+    desktop_test = desktop_sub.add_parser("test")
+    desktop_test.add_argument("skill_id")
 
     subparsers.add_parser("doctor")
 
@@ -254,6 +264,28 @@ def handle_version(args: argparse.Namespace, project_root: Path) -> int:
         manager.rollback_to_version(skill=skill, version_id=args.version_id)
         print(f"rolled back {args.skill_id} to {args.version_id}")
         return 0
+
+    return 1
+
+
+def handle_desktop(args: argparse.Namespace, project_root: Path) -> int:
+    registry = SkillRegistry(project_root / "example_skills")
+    skill = registry.load(args.skill_id)
+    if not skill.runtime.startswith("desktop"):
+        print(json.dumps({
+            "status": "error",
+            "error": f"Skill '{args.skill_id}' is not a desktop runtime Skill.",
+        }, indent=2))
+        return 1
+
+    if args.action == "simulate":
+        result = run_desktop_skill(project_root, args.skill_id, scenario=getattr(args, "scenario", "price"))
+        payload = {"status": result["status"], **result["outputs"]}
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        return 0 if result["status"] == "success" else 1
+
+    if args.action == "test":
+        return test_skill(project_root, args.skill_id)
 
     return 1
 
@@ -451,6 +483,12 @@ def create_skill(project_root: Path, skill_id: str) -> dict[str, str]:
 def run_skill(project_root: Path, skill_id: str) -> dict[str, Any]:
     module = load_skill_main(project_root, skill_id)
     result = module.run(storage_root=project_root / "storage")
+    return result.to_dict()
+
+
+def run_desktop_skill(project_root: Path, skill_id: str, *, scenario: str = "price") -> dict[str, Any]:
+    module = load_skill_main(project_root, skill_id)
+    result = module.run(storage_root=project_root / "storage", scenario=scenario)
     return result.to_dict()
 
 

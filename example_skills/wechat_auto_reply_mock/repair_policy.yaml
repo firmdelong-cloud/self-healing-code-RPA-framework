@@ -1,0 +1,21 @@
+retry:
+  max_attempts: 1
+  delay_seconds: 0
+repair_scope:
+  scope_type: selector_only
+  allowed_files:
+    - example_skills/wechat_auto_reply_mock/selectors.yaml
+  allowed_selector_refs:
+    - unread_chat_item
+    - latest_incoming_message
+    - reply_input
+    - send_button
+  must_not_touch_other_steps: true
+  must_not_touch_runtime: true
+sandbox:
+  required: true
+  command:
+    - python
+    - -m
+    - pytest
+    - tests/test_desktop_runtime.py

@@ -16,6 +16,7 @@ class SkillDefinition:
     id: str
     name: str
     version: str
+    runtime: str
     base_path: Path
     entrypoint: str
     selectors_path: Path
@@ -23,6 +24,7 @@ class SkillDefinition:
     description: str
     inputs: dict[str, Any]
     output_schema: dict[str, Any]
+    policy: dict[str, Any]
     selectors: dict[str, Any]
     repair_policy: dict[str, Any]
     steps: list[dict[str, Any]]
@@ -53,6 +55,7 @@ class SkillLoader:
             id=raw["id"],
             name=raw["name"],
             version=str(raw["version"]),
+            runtime=str(raw.get("runtime", "web")),
             base_path=base_path,
             entrypoint=raw["entrypoint"],
             selectors_path=selectors_path,
@@ -60,6 +63,7 @@ class SkillLoader:
             description=str(raw.get("description", "")),
             inputs=raw.get("inputs", {}) or {},
             output_schema=raw.get("outputs", {}) or {},
+            policy=raw.get("policy", {}) or {},
             selectors=selectors,
             repair_policy=repair_policy,
             steps=raw["steps"],

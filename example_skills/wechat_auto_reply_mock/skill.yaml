@@ -1,0 +1,87 @@
+id: wechat_auto_reply_mock
+name: WeChat Auto Reply Mock
+version: 0.1.0
+runtime: desktop_mock
+description: Detect unread chat messages in a mock WeChat window, generate a safe reply, and auto-send only when policy allows it.
+entrypoint: main.py
+selectors: selectors.yaml
+repair_policy: repair_policy.yaml
+inputs:
+  scenario:
+    type: string
+    default: price
+outputs:
+  contact_name:
+    type: string
+  latest_message:
+    type: string
+  intent:
+    type: string
+  reply_text:
+    type: string
+  auto_send_allowed:
+    type: boolean
+  sent:
+    type: boolean
+  handoff_required:
+    type: boolean
+policy:
+  mode: controlled_auto_reply
+  auto_send: true
+  allow_group_chat: false
+  max_replies_per_contact_per_hour: 3
+  max_total_replies_per_hour: 20
+  blocked_intents:
+    - refund_dispute
+    - legal_issue
+    - payment_sensitive
+    - complaint
+  fallback_to_human: true
+steps:
+  - id: open_mock_window
+    type: open_window
+    goal: Open the mock WeChat desktop chat window.
+    url: "{{WECHAT_MOCK_URL}}"
+
+  - id: detect_unread_chat
+    type: detect_unread
+    goal: Detect the next unread chat conversation.
+    selector_ref: unread_chat_item
+
+  - id: open_unread_chat
+    type: click_chat
+    goal: Open the unread conversation.
+    selector_ref: unread_chat_item
+
+  - id: read_recent_message
+    type: read_chat_text
+    goal: Read the latest incoming message from the chat.
+    selector_ref: latest_incoming_message
+
+  - id: classify_intent
+    type: classify_intent
+    goal: Classify the latest message intent.
+    message_key: normalized_text
+
+  - id: generate_reply
+    type: generate_reply
+    goal: Generate a deterministic reply for the current intent.
+
+  - id: safety_check
+    type: safety_check
+    goal: Block risky conversations from unattended auto-send.
+
+  - id: auto_send_policy
+    type: auto_send_policy
+    goal: Apply auto-send limits and group-chat restrictions.
+
+  - id: fill_reply_box
+    type: fill_text
+    goal: Fill the reply box with the generated response.
+    selector_ref: reply_input
+    reply_output_key: reply_text
+
+  - id: send_reply
+    type: send_message
+    goal: Send the reply only when policy allows it.
+    selector_ref: send_button

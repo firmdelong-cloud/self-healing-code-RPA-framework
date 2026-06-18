@@ -34,6 +34,11 @@ class SkillValidator:
         "extract_table",
         "download_file",
         "wait_for_selector",
+        "detect_unread",
+        "click_chat",
+        "read_chat_text",
+        "fill_text",
+        "send_message",
     }
     OPTIONAL_SELECTOR_TYPES = {"wait_for", "assert_text"}
     SELECTOR_REFS_TYPES = {"login", "select_date_range"}
@@ -94,6 +99,14 @@ class SkillValidator:
 
         if not isinstance(data.get("steps"), list) or not data.get("steps"):
             errors.append("skill.yaml steps must be a non-empty list")
+
+        runtime = str(data.get("runtime", "web"))
+        if runtime.startswith("desktop") and runtime != "desktop_mock":
+            desktop_config = data.get("desktop")
+            if not isinstance(desktop_config, dict):
+                errors.append("desktop Skills must define a desktop mapping")
+            elif not desktop_config.get("window_title_regex"):
+                errors.append("desktop.window_title_regex is required for live desktop Skills")
 
     def _validate_steps(
         self,
@@ -193,7 +206,10 @@ class SkillValidator:
             )
 
     def _validate_fixtures(self, skill_id: str, skill_yaml: dict[str, Any], errors: list[str]) -> None:
+        runtime = str(skill_yaml.get("runtime", "web"))
         expected_fixture_names = self._fixture_names_from_steps(skill_yaml.get("steps", []))
+        if runtime.startswith("desktop") and runtime != "desktop_mock" and not expected_fixture_names:
+            return
         if not expected_fixture_names:
             errors.append("Skill must declare a local HTML fixture URL in skill.yaml")
             return

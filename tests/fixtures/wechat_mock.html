@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>WeChat Mock</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: "Microsoft YaHei", sans-serif;
+        background: #f3f5f7;
+      }
+      .wechat-shell {
+        display: grid;
+        grid-template-columns: 280px 1fr;
+        height: 100vh;
+      }
+      .sidebar {
+        background: #202329;
+        color: #fff;
+        padding: 16px 0;
+      }
+      .sidebar h1 {
+        font-size: 16px;
+        margin: 0 16px 12px;
+      }
+      .contact-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 16px;
+        cursor: pointer;
+      }
+      .contact-item.active {
+        background: #2f3238;
+      }
+      .contact-item.unread .contact-name {
+        font-weight: 700;
+      }
+      .unread-badge {
+        min-width: 18px;
+        height: 18px;
+        border-radius: 9px;
+        background: #ff4d4f;
+        color: #fff;
+        text-align: center;
+        font-size: 12px;
+        line-height: 18px;
+        padding: 0 6px;
+      }
+      .chat-area {
+        display: grid;
+        grid-template-rows: 56px 1fr 140px;
+        background: #ececec;
+      }
+      .chat-header {
+        display: flex;
+        align-items: center;
+        padding: 0 20px;
+        border-bottom: 1px solid #ddd;
+        background: #f7f7f7;
+      }
+      #chat-history {
+        padding: 20px;
+        overflow-y: auto;
+      }
+      .message {
+        margin-bottom: 12px;
+        display: flex;
+      }
+      .message.incoming {
+        justify-content: flex-start;
+      }
+      .message.outgoing {
+        justify-content: flex-end;
+      }
+      .message-text {
+        background: #fff;
+        border-radius: 6px;
+        padding: 10px 12px;
+        max-width: 70%;
+      }
+      .message.outgoing .message-text {
+        background: #95ec69;
+      }
+      .composer {
+        background: #f7f7f7;
+        border-top: 1px solid #ddd;
+        display: grid;
+        grid-template-rows: 1fr 46px 24px;
+        gap: 8px;
+        padding: 12px 20px;
+      }
+      #reply-box {
+        width: 100%;
+        resize: none;
+        border: none;
+        outline: none;
+        background: #fff;
+        padding: 10px;
+        box-sizing: border-box;
+      }
+      .composer-actions {
+        display: flex;
+        justify-content: flex-end;
+      }
+      #send-button {
+        border: none;
+        background: #07c160;
+        color: #fff;
+        padding: 0 18px;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      #send-status {
+        font-size: 12px;
+        color: #666;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wechat-shell">
+      <aside class="sidebar">
+        <h1>微信 Mock</h1>
+        <div id="contact-list"></div>
+      </aside>
+      <main class="chat-area">
+        <header class="chat-header">
+          <strong id="chat-title"></strong>
+        </header>
+        <section id="chat-panel" data-is-group="false">
+          <div id="chat-history"></div>
+        </section>
+        <section class="composer">
+          <textarea id="reply-box" placeholder="请输入消息"></textarea>
+          <div class="composer-actions">
+            <button id="send-button" type="button">发送</button>
+          </div>
+          <div id="send-status"></div>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      const scenario = new URLSearchParams(window.location.search).get("scenario") || "price";
+      const scenarios = {
+        price: {
+          contacts: [
+            {
+              name: "客户A",
+              unreadCount: 1,
+              isGroup: false,
+              messages: [
+                { direction: "incoming", text: "你好，多少钱？" }
+              ]
+            },
+            {
+              name: "客户群",
+              unreadCount: 0,
+              isGroup: true,
+              messages: [
+                { direction: "incoming", text: "大家下午好" }
+              ]
+            }
+          ]
+        },
+        refund: {
+          contacts: [
+            {
+              name: "客户A",
+              unreadCount: 1,
+              isGroup: false,
+              messages: [
+                { direction: "incoming", text: "我要退款，尽快处理" }
+              ]
+            }
+          ]
+        },
+        group: {
+          contacts: [
+            {
+              name: "售前交流群",
+              unreadCount: 1,
+              isGroup: true,
+              messages: [
+                { direction: "incoming", text: "张三: 多少钱？" }
+              ]
+            }
+          ]
+        }
+      };
+
+      const state = {
+        contacts: JSON.parse(JSON.stringify((scenarios[scenario] || scenarios.price).contacts)),
+        activeIndex: 0
+      };
+
+      const contactList = document.getElementById("contact-list");
+      const chatTitle = document.getElementById("chat-title");
+      const chatPanel = document.getElementById("chat-panel");
+      const chatHistory = document.getElementById("chat-history");
+      const replyBox = document.getElementById("reply-box");
+      const sendButton = document.getElementById("send-button");
+      const sendStatus = document.getElementById("send-status");
+
+      function renderContacts() {
+        contactList.innerHTML = "";
+        state.contacts.forEach((contact, index) => {
+          const item = document.createElement("div");
+          item.className = "contact-item" + (index === state.activeIndex ? " active" : "") + (contact.unreadCount > 0 ? " unread" : "");
+          item.dataset.contactName = contact.name;
+          item.dataset.unreadCount = String(contact.unreadCount);
+          item.dataset.isGroup = String(contact.isGroup);
+          item.innerHTML = `
+            <span class="contact-name">${contact.name}</span>
+            ${contact.unreadCount > 0 ? `<span class="unread-badge">${contact.unreadCount}</span>` : `<span class="unread-badge" style="visibility:hidden">0</span>`}
+          `;
+          item.addEventListener("click", () => {
+            state.activeIndex = index;
+            state.contacts[index].unreadCount = 0;
+            sendStatus.textContent = "";
+            renderContacts();
+            renderChat();
+          });
+          contactList.appendChild(item);
+        });
+      }
+
+      function renderChat() {
+        const current = state.contacts[state.activeIndex];
+        chatTitle.textContent = current.name;
+        chatPanel.dataset.isGroup = String(current.isGroup);
+        chatHistory.innerHTML = "";
+        current.messages.forEach((message) => {
+          const row = document.createElement("div");
+          row.className = `message ${message.direction}`;
+          row.innerHTML = `<div class="message-text">${message.text}</div>`;
+          chatHistory.appendChild(row);
+        });
+      }
+
+      sendButton.addEventListener("click", () => {
+        const current = state.contacts[state.activeIndex];
+        const text = replyBox.value.trim();
+        if (!text) {
+          sendStatus.textContent = "draft-empty";
+          return;
+        }
+        current.messages.push({ direction: "outgoing", text });
+        replyBox.value = "";
+        sendStatus.textContent = "sent";
+        renderChat();
+      });
+
+      renderContacts();
+      renderChat();
+    </script>
+  </body>
+</html>
