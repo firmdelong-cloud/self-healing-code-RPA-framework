@@ -421,6 +421,7 @@ It teaches future Codex runs to follow this framework's rules: no LLM calls duri
 - No automatic Python code patching.
 - No production scheduler or deployment hardening.
 - The live WeChat desktop adapter is best-effort and environment-specific; repeatable tests still run on the mock fixture.
+- Some Weixin desktop builds expose only a minimal Qt accessibility tree, which can block unread detection and message reading without OCR, injection, or protocol-level access.
 
 ## Safety Boundaries
 

@@ -1,4 +1,5 @@
 playwright>=1.45.0
 PyYAML>=6.0.1
 pytest>=8.0.0
+pillow>=12.0.0
 pywinauto>=0.6.8

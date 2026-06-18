@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+import re
+import subprocess
 from typing import Any
 
 from rpa_runtime.browser import PlaywrightBrowser
@@ -12,6 +13,9 @@ from .window_controller import DesktopSession, LiveWechatWindow, MockDesktopWind
 
 class AppFinder:
     """Create a desktop window session from the Skill runtime."""
+
+    WECHAT_PROCESS_NAMES = {"WeChat", "WeChatAppEx", "Weixin"}
+    BLOCKED_PROCESS_NAMES = {"WXWork", "WXWorkWeb", "WXWorkXNet"}
 
     def find_window(
         self,
@@ -45,9 +49,45 @@ class AppFinder:
             ) from error
 
         desktop = Desktop(backend="uia")
-        windows = desktop.windows(title_re=window_title_regex, visible_only=True)
+        title_pattern = re.compile(window_title_regex) if window_title_regex else None
+        windows = []
+        for candidate in desktop.windows(visible_only=True):
+            candidate_pid = candidate.process_id()
+            if candidate_pid is None:
+                continue
+            process_name = self._process_name_for_pid(int(candidate_pid))
+            if process_name in self.BLOCKED_PROCESS_NAMES:
+                continue
+            title = (candidate.window_text() or "").strip()
+            title_matches = bool(title_pattern.search(title)) if title_pattern and title else False
+            if process_name in self.WECHAT_PROCESS_NAMES or title_matches:
+                windows.append(candidate)
+
         if not windows:
-            raise RuntimeError(f"Could not find a visible WeChat window matching: {window_title_regex}")
-        window = windows[0]
+            raise RuntimeError(
+                "Could not find a visible personal WeChat window. "
+                "Please open the official WeChat desktop chat window and bring it to the foreground."
+            )
+
+        preferred = [
+            candidate
+            for candidate in windows
+            if candidate.process_id() is not None
+            and self._process_name_for_pid(int(candidate.process_id())) in self.WECHAT_PROCESS_NAMES
+        ]
+        window = preferred[0] if preferred else windows[0]
         window.set_focus()
         return LiveWechatWindow(window)
+
+    def _process_name_for_pid(self, pid: int) -> str:
+        command = (
+            f"Get-Process -Id {pid} -ErrorAction SilentlyContinue | "
+            "Select-Object -ExpandProperty ProcessName"
+        )
+        completed = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", command],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return completed.stdout.strip()
