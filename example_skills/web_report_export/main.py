@@ -23,13 +23,22 @@ def report_demo_url() -> str:
 
 def prepare_skill(skill: SkillDefinition, demo_url: str | None = None) -> SkillDefinition:
     resolved_url = demo_url or report_demo_url()
+    resolved_nodes = []
+    for node in skill.nodes:
+        resolved_node = dict(node)
+        inputs = dict(resolved_node.get("inputs", {}) or {})
+        if inputs.get("url") == "{{REPORT_DEMO_URL}}":
+            inputs["url"] = resolved_url
+            resolved_node["inputs"] = inputs
+        resolved_nodes.append(resolved_node)
+
     resolved_steps = []
     for step in skill.steps:
         resolved_step = dict(step)
         if resolved_step.get("url") == "{{REPORT_DEMO_URL}}":
             resolved_step["url"] = resolved_url
         resolved_steps.append(resolved_step)
-    return replace(skill, steps=resolved_steps)
+    return replace(skill, steps=resolved_steps, nodes=resolved_nodes)
 
 
 def run(page: Any | None = None, storage_root: Path | None = None) -> RunResult:

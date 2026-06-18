@@ -16,42 +16,84 @@ class ReplyResult:
 
 
 class ReplyEngine:
-    """Return a controlled reply template for the current intent."""
+    """Return a controlled reply template for the current intent.
+
+    The message runtime intentionally stays rule-based in this repository.
+    External LLM/API reply generation can be added later behind the same
+    interface, but tests and default demos must remain deterministic.
+    """
 
     REPLIES = {
         "price_inquiry": (
-            "您好，具体价格需要看您选择的产品规格，我可以先发您一份报价参考。",
+            "Hello, the exact price depends on the product specification. "
+            "I can share a quotation reference first.",
             "price_inquiry_default",
         ),
         "greeting": (
-            "您好，我在的，请告诉我您想了解的产品或服务信息。",
+            "Hello, I am here. Please tell me which product or service you want to know about.",
             "greeting_default",
         ),
         "general_inquiry": (
-            "您好，我已经收到您的消息，我先帮您确认一下具体情况。",
+            "Hello, I have received your message. I will confirm the details first.",
             "general_inquiry_default",
         ),
         "refund_dispute": (
-            "您好，这类售后问题我需要转给人工同事进一步处理。",
+            "Hello, this after-sale issue needs a human colleague to follow up.",
             "refund_handoff",
         ),
         "legal_issue": (
-            "您好，这类问题需要转人工同事跟进处理。",
+            "Hello, this legal issue needs a human colleague to follow up.",
             "legal_handoff",
         ),
         "payment_sensitive": (
-            "您好，涉及付款信息的问题需要人工同事进一步确认。",
+            "Hello, payment-related information needs human confirmation.",
             "payment_handoff",
         ),
         "complaint": (
-            "您好，很抱歉给您带来不便，我先转给人工同事尽快处理。",
+            "Hello, sorry for the inconvenience. I will hand this over to a human colleague.",
             "complaint_handoff",
         ),
     }
 
-    def generate(self, *, intent: str, latest_message: str, contact_name: str) -> ReplyResult:
-        reply_text, template_id = self.REPLIES.get(
-            intent,
-            self.REPLIES["general_inquiry"],
-        )
+    WAIT_KEYWORDS = {"wait", "later", "hold on", "afternoon", "tomorrow"}
+    PRICE_CONTEXT_KEYWORDS = {"price", "quote", "quotation", "cost", "how much"}
+
+    def generate(
+        self,
+        *,
+        intent: str,
+        latest_message: str,
+        contact_name: str,
+        recent_history: list[dict[str, str]] | None = None,
+    ) -> ReplyResult:
+        history_text = " ".join(item.get("text", "") for item in (recent_history or []))
+        normalized_latest = str(latest_message or "").strip()
+        normalized_history = f"{history_text} {normalized_latest}".strip()
+
+        if self._contains_any(normalized_latest, self.WAIT_KEYWORDS) and normalized_history:
+            return ReplyResult(
+                reply_text=(
+                    "No problem. I will keep following this conversation, and you can send any new "
+                    "details when you are ready."
+                ),
+                template_id="wait_followup_contextual",
+            )
+
+        if intent == "general_inquiry" and self._contains_any(
+            normalized_history,
+            self.PRICE_CONTEXT_KEYWORDS,
+        ):
+            return ReplyResult(
+                reply_text=(
+                    "Got it. I see the price context, so I will organize a clear quotation reference "
+                    "for you."
+                ),
+                template_id="price_followup_contextual",
+            )
+
+        reply_text, template_id = self.REPLIES.get(intent, self.REPLIES["general_inquiry"])
         return ReplyResult(reply_text=reply_text, template_id=template_id)
+
+    def _contains_any(self, text: str, keywords: set[str]) -> bool:
+        haystack = str(text or "").lower()
+        return any(keyword.lower() in haystack for keyword in keywords)

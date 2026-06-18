@@ -1,8 +1,10 @@
-id: wechat_auto_reply_live
+﻿id: wechat_auto_reply_live
 name: WeChat Auto Reply Live
 version: 0.1.0
+
+type: procedure_skill
 runtime: desktop_wechat
-description: Attach to the visible official WeChat desktop client, detect an unread conversation, generate a controlled reply, and auto-send only when policy allows it.
+description: Attach to the visible official WeChat desktop client, detect an unread conversation, generate a controlled reply, and stop before sending by default.
 entrypoint: main.py
 selectors: selectors.yaml
 repair_policy: repair_policy.yaml
@@ -38,7 +40,7 @@ policy:
     - complaint
   fallback_to_human: true
 desktop:
-  window_title_regex: 微信|WeChat
+  window_title_regex: WeChat|微信
   require_visible_client: true
   notes:
     - Attach only to the visible official WeChat desktop window.

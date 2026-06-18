@@ -9,7 +9,7 @@ def test_skill_loads() -> None:
     assert skill.id == "wechat_auto_reply_live"
     assert skill.runtime == "desktop_wechat"
     assert skill.policy["auto_send"] is False
-    assert skill.raw["desktop"]["window_title_regex"] == "微信|WeChat"
+    assert skill.raw["desktop"]["window_title_regex"] == "WeChat|微信"
 
 
 def test_skill_validates_for_live_desktop() -> None:

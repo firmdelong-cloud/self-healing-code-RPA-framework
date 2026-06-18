@@ -726,13 +726,22 @@ def degrade_customer_keyword_selector(project_root: Path) -> None:
 
 def prepare_demo_skill(project_root: Path, skill: Any) -> Any:
     fixture_url = (project_root / "tests" / "fixtures" / "report_demo.html").resolve().as_uri()
+    resolved_nodes = []
+    for node in getattr(skill, "nodes", []) or []:
+        resolved_node = dict(node)
+        inputs = dict(resolved_node.get("inputs", {}) or {})
+        if inputs.get("url") == "{{REPORT_DEMO_URL}}":
+            inputs["url"] = fixture_url
+            resolved_node["inputs"] = inputs
+        resolved_nodes.append(resolved_node)
+
     resolved_steps = []
     for step in skill.steps:
         resolved_step = dict(step)
         if resolved_step.get("url") == "{{REPORT_DEMO_URL}}":
             resolved_step["url"] = fixture_url
         resolved_steps.append(resolved_step)
-    return replace(skill, steps=resolved_steps)
+    return replace(skill, steps=resolved_steps, nodes=resolved_nodes)
 
 
 def prepare_customer_skill(project_root: Path, skill: Any) -> Any:

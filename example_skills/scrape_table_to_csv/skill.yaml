@@ -1,6 +1,8 @@
-id: scrape_table_to_csv
+﻿id: scrape_table_to_csv
 name: Scrape Table To CSV
 version: 0.1.0
+
+type: procedure_skill
 description: Open a local table fixture, extract rows, save them as CSV, and expose structured outputs.
 entrypoint: main.py
 selectors: selectors.yaml

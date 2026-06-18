@@ -5,12 +5,22 @@ description: Build, modify, test, or repair RPA Skills in this Self-Healing Code
 
 # Self-Healing RPA Engineer
 
-Use this skill when working inside this repository on RPA Skills or selector-level repair flows.
+Use this skill when working inside this repository on Automation Skill Engine Skills, Procedure Skill selector-level repair flows, or Event Skill architecture.
+
+## Skill Models
+
+- Use `procedure_skill` for fixed, repeatable workflows such as Web report export, form submission, scraping, and admin back-office automation.
+- Use `event_skill` for continuous, stateful interaction scenarios such as chat, inbox, desktop notification, and customer-service message handling.
+- Do not force message automation into the fixed Procedure Skill model. Message automation must use Event Skill concepts: event detection, context building, decision policy, action policy, safety, and memory.
+- WeChat-related work belongs under `experimental/adapters/wechat/` or `experimental/event_skills/` unless the user explicitly asks to maintain the legacy mock/live desktop examples.
+- Event Skill defaults must be dry-run, draft-only, or human-confirm. Do not make auto-send the default.
 
 ## Core Rules
 
 - Normal Skill execution must not call an LLM.
 - Web RPA runs through Python + Playwright and YAML Skill definitions.
+- Procedure Skills run through the stable code runtime and selector repair pipeline.
+- Event Skills run through bounded event polling and must model decisions before actions.
 - On failure, the runtime must retry and try fallback selectors before generating `repair_request.json`.
 - Current automated repair is selector-only.
 - `patch.json` may use only `selector_update` or `fallback_selector_add`.
@@ -21,13 +31,13 @@ Use this skill when working inside this repository on RPA Skills or selector-lev
 - High-risk steps require human confirmation and must not be auto-patched.
 - Every Skill must include pytest coverage.
 - Do not bypass safety checks, logs, snapshots, sandbox tests, or versioning.
-- Do not modify `rpa_runtime/`, `repair_agent/`, or `skill_registry/` when the task is only to create a new Skill.
+- Do not modify `rpa_runtime/`, `procedure_runtime/`, `event_runtime/`, `repair_agent/`, or `skill_registry/` when the task is only to create a new Skill.
 - When repairing a failed Skill, generate `patch.json` first; do not directly edit Skill files.
 
 ## Workflow
 
 1. Read `AGENTS.md` before major runtime or repair changes.
-2. For architecture context, read `references/architecture.md`.
+2. For architecture context, read `references/architecture.md` and `docs/automation-skill-engine.md`.
 3. For creating or updating a Skill, read `references/rpa-skill-spec.md` and use the templates in `assets/`.
 4. For natural-language Skill generation, read `docs/codex-generate-skill.md`.
 5. For Codex-style patch generation, read `docs/patch-format.md` and `docs/codex-generate-patch.md`.
@@ -37,7 +47,7 @@ Use this skill when working inside this repository on RPA Skills or selector-lev
 
 ## Skill Creation
 
-Create Skills under `example_skills/<skill_id>/` with:
+Create Procedure Skills under `example_skills/<skill_id>/` with:
 
 - `skill.yaml`
 - `selectors.yaml`
@@ -51,11 +61,15 @@ Prefer `python -m code_rpa skill create <skill_id>` for scaffolding.
 
 `skill.yaml` must include `id`, `name`, `version`, `description`, `inputs`, `outputs`, and `steps`.
 
+`skill.yaml` must declare `type: procedure_skill` unless the task is explicitly to design an Event Skill.
+
 Each step must include `id`, `type`, and `goal`. Selector steps must use `selector_ref` or `selector_refs`.
 
 `selectors.yaml` must define a `primary` selector for each selector ref and should include `fallbacks`.
 
 `repair_policy.yaml` must use `repair_scope.scope_type: selector_only`.
+
+Event Skill declarations should use `event_skill.yaml` and include `trigger`, `observe`, `decision_policy`, `reply_policy`, `rate_limit`, `safety`, and `memory`. Event Skills should live under `experimental/event_skills/` until the runtime is productionized.
 
 ## Quality Gate
 

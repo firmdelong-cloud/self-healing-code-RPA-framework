@@ -20,10 +20,10 @@ from example_skills.wechat_auto_reply_mock.main import run as run_wechat_skill
 
 
 class FakeDesktopWindow:
-    def __init__(self, *, latest_message: str = "你好，多少钱？", is_group_chat: bool = False):
+    def __init__(self, *, latest_message: str = "hello, how much is it?", is_group_chat: bool = False):
         self.latest_message = latest_message
         self.is_group_chat = is_group_chat
-        self.contact_name = "客户A" if not is_group_chat else "售前交流群"
+        self.contact_name = "Customer A" if not is_group_chat else "Sales Group"
         self.url = "desktop://wechat-mock"
         self.opened_url: str | None = None
         self.draft_text = ""
@@ -115,12 +115,12 @@ def test_detect_unread_chat(tmp_path: Path) -> None:
     )
 
     assert result.status == "success"
-    assert outputs["contact_name"] == "客户A"
+    assert outputs["contact_name"] == "Customer A"
     assert outputs["unread_count"] == 1
 
 
 def test_open_unread_chat(tmp_path: Path) -> None:
-    outputs = {"contact_name": "客户A", "is_group_chat": False}
+    outputs = {"contact_name": "Customer A", "is_group_chat": False}
     result = make_runner(tmp_path).run(
         FakeDesktopWindow(),
         {"id": "open", "type": "click_chat", "goal": "Open chat", "selector_ref": "unread_chat_item"},
@@ -128,24 +128,24 @@ def test_open_unread_chat(tmp_path: Path) -> None:
     )
 
     assert result.status == "success"
-    assert outputs["contact_name"] == "客户A"
+    assert outputs["contact_name"] == "Customer A"
 
 
 def test_read_recent_message(tmp_path: Path) -> None:
-    outputs = {"contact_name": "客户A", "is_group_chat": False}
+    outputs = {"contact_name": "Customer A", "is_group_chat": False}
     result = make_runner(tmp_path).run(
-        FakeDesktopWindow(latest_message="你好，多少钱？"),
+        FakeDesktopWindow(latest_message="hello, how much is it?"),
         {"id": "read", "type": "read_chat_text", "goal": "Read", "selector_ref": "latest_incoming_message"},
         outputs=outputs,
     )
 
     assert result.status == "success"
-    assert outputs["latest_message"] == "你好，多少钱？"
-    assert outputs["normalized_text"] == "你好，多少钱？"
+    assert outputs["latest_message"] == "hello, how much is it?"
+    assert outputs["normalized_text"] == "hello, how much is it?"
 
 
 def test_classify_price_inquiry() -> None:
-    result = IntentClassifier().classify("你好，多少钱？")
+    result = IntentClassifier().classify("hello, how much is it?")
 
     assert result.intent == "price_inquiry"
     assert result.risk_level == "low"
@@ -154,18 +154,18 @@ def test_classify_price_inquiry() -> None:
 def test_generate_reply() -> None:
     reply = ReplyEngine().generate(
         intent="price_inquiry",
-        latest_message="你好，多少钱？",
-        contact_name="客户A",
+        latest_message="hello, how much is it?",
+        contact_name="Customer A",
     )
 
-    assert "报价参考" in reply.reply_text
+    assert "quotation reference" in reply.reply_text
 
 
 def test_safety_guard_blocks_refund_dispute() -> None:
     guard = SafetyGuard()
     decision = guard.evaluate(
         intent="refund_dispute",
-        latest_message="我要退款",
+        latest_message="I want a refund",
         policy=make_skill().policy,
     )
 
@@ -176,7 +176,7 @@ def test_safety_guard_blocks_refund_dispute() -> None:
 def test_auto_send_policy_allows_low_risk_message(tmp_path: Path) -> None:
     logger = ConversationLogger(tmp_path / "conversations", skill_id="wechat_auto_reply_mock")
     decision = AutoSendPolicy().evaluate(
-        contact_name="客户A",
+        contact_name="Customer A",
         is_group_chat=False,
         policy=make_skill().policy,
         logger=logger,
@@ -190,7 +190,7 @@ def test_auto_send_policy_allows_low_risk_message(tmp_path: Path) -> None:
 def test_auto_send_policy_blocks_group_chat(tmp_path: Path) -> None:
     logger = ConversationLogger(tmp_path / "conversations", skill_id="wechat_auto_reply_mock")
     decision = AutoSendPolicy().evaluate(
-        contact_name="售前交流群",
+        contact_name="Sales Group",
         is_group_chat=True,
         policy=make_skill().policy,
         logger=logger,
@@ -204,10 +204,10 @@ def test_auto_send_policy_blocks_group_chat(tmp_path: Path) -> None:
 def test_auto_send_policy_blocks_over_limit(tmp_path: Path) -> None:
     logger = ConversationLogger(tmp_path / "conversations", skill_id="wechat_auto_reply_mock")
     for index in range(3):
-        logger.record("message_sent", contact_name="客户A", payload={"index": index})
+        logger.record("message_sent", contact_name="Customer A", payload={"index": index})
 
     decision = AutoSendPolicy().evaluate(
-        contact_name="客户A",
+        contact_name="Customer A",
         is_group_chat=False,
         policy=make_skill().policy,
         logger=logger,
@@ -220,28 +220,38 @@ def test_auto_send_policy_blocks_over_limit(tmp_path: Path) -> None:
 
 def test_fill_reply_box() -> None:
     window = FakeDesktopWindow()
-    fill_text(window, "#reply-box", "您好，我先发您报价参考。")
+    fill_text(window, "#reply-box", "Hello, I can share a quotation reference.")
 
-    assert window.draft_text == "您好，我先发您报价参考。"
+    assert window.draft_text == "Hello, I can share a quotation reference."
 
 
 def test_send_reply() -> None:
     window = FakeDesktopWindow()
-    window.draft_text = "您好，我先发您报价参考。"
+    window.draft_text = "Hello, I can share a quotation reference."
 
     sent = send_message(window, "#send-button")
 
     assert sent is True
-    assert window.sent_messages == ["您好，我先发您报价参考。"]
+    assert window.sent_messages == ["Hello, I can share a quotation reference."]
 
 
 def test_conversation_logger_records_sent_message(tmp_path: Path) -> None:
     logger = ConversationLogger(tmp_path / "conversations", skill_id="wechat_auto_reply_mock")
-    logger.record("message_sent", contact_name="客户A", payload={"reply_text": "ok"})
+    logger.record("message_sent", contact_name="Customer A", payload={"reply_text": "ok"})
 
     events = (tmp_path / "conversations" / "wechat_auto_reply_mock.jsonl").read_text(encoding="utf-8")
     assert "message_sent" in events
-    assert logger.count_sent_for_contact("客户A", within_hours=1) == 1
+    assert logger.count_sent_for_contact("Customer A", within_hours=1) == 1
+
+
+def test_conversation_logger_detects_recent_reply_echo(tmp_path: Path) -> None:
+    logger = ConversationLogger(tmp_path / "conversations", skill_id="wechat_auto_reply_mock")
+    reply_text = "Hello, I have received your message. Please tell me what you need."
+    logger.record("draft_filled", contact_name="Customer A", payload={"reply_text": reply_text})
+
+    assert logger.looks_like_recent_reply_echo("Customer A", reply_text) is True
+    assert logger.looks_like_recent_reply_echo("Customer A", reply_text + ".") is True
+    assert logger.looks_like_recent_reply_echo("Customer A", "new quote request") is False
 
 
 @pytest.mark.integration
@@ -249,8 +259,8 @@ def test_wechat_auto_reply_mock_skill(tmp_path: Path) -> None:
     result = run_wechat_skill(storage_root=tmp_path, scenario="price")
 
     assert result.status == "success"
-    assert result.outputs["contact_name"] == "客户A"
-    assert result.outputs["latest_message"] == "你好，多少钱？"
+    assert result.outputs["contact_name"] == "Customer A"
+    assert result.outputs["latest_message"] == "hello, how much is it?"
     assert result.outputs["intent"] == "price_inquiry"
     assert result.outputs["auto_send_allowed"] is True
     assert result.outputs["sent"] is True

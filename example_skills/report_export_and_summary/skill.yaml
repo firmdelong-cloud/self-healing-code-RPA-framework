@@ -1,0 +1,168 @@
+skill_id: report_export_and_summary
+id: report_export_and_summary
+name: Report Export And Summary
+version: 0.1.0
+type: procedure_skill
+runtime: web
+description: Export a local report, read the exported CSV data, generate a mock AI summary, and write the summary file.
+entrypoint: main.py
+selectors: selectors.yaml
+repair_policy: repair_policy.yaml
+inputs:
+  username:
+    type: string
+    default: demo_user
+  password:
+    type: string
+    default: demo_password
+variables:
+  report_demo_url: "{{REPORT_DEMO_URL}}"
+outputs:
+  csv_path:
+    type: string
+  table_rows:
+    type: integer
+  summary_text:
+    type: string
+  summary_path:
+    type: string
+policies:
+  high_risk_requires_human: true
+tests:
+  - tests/test_component_runtime.py
+nodes:
+  - id: open_login_page
+    component: browser.goto
+    goal: Open the local report page.
+    inputs:
+      url: "{{REPORT_DEMO_URL}}"
+
+  - id: fill_username
+    component: browser.fill
+    goal: Fill the username.
+    inputs:
+      selector_ref: username_input
+      value: demo_user
+
+  - id: fill_password
+    component: browser.fill
+    goal: Fill the password.
+    inputs:
+      selector_ref: password_input
+      value: demo_password
+
+  - id: submit_login
+    component: browser.click
+    goal: Submit login.
+    inputs:
+      selector_ref: login_submit_button
+
+  - id: enter_report_page
+    component: browser.click
+    goal: Enter the report page.
+    inputs:
+      selector_ref: report_page_link
+
+  - id: fill_start_date
+    component: browser.fill
+    goal: Fill the report start date.
+    inputs:
+      selector_ref: date_start_input
+      value: "2026-06-01"
+
+  - id: fill_end_date
+    component: browser.fill
+    goal: Fill the report end date.
+    inputs:
+      selector_ref: date_end_input
+      value: "2026-06-17"
+
+  - id: click_export
+    component: browser.click
+    goal: Export the report.
+    inputs:
+      selector_ref: export_button
+
+  - id: wait_export_success
+    component: browser.wait_for_selector
+    goal: Wait for the export success message.
+    inputs:
+      selector_ref: export_success_message
+
+  - id: read_export_data
+    component: browser.extract_text
+    goal: Read exported CSV data from the local download link.
+    inputs:
+      selector_ref: download_link
+      attribute: href
+      output_key: export_csv_text
+
+  - id: write_export_csv
+    component: file.write_text
+    goal: Persist the exported CSV data.
+    inputs:
+      path: report.csv
+      text: "{{outputs.export_csv_text}}"
+      output_key: csv_path
+
+  - id: read_export_csv
+    component: excel.read
+    goal: Read exported CSV rows.
+    inputs:
+      path: "{{outputs.csv_path}}"
+      output_key: report_rows
+      row_count_output_key: table_rows
+      has_header: true
+
+  - id: generate_summary
+    component: ai.generate_text
+    goal: Generate a mock AI summary for the exported report.
+    inputs:
+      prompt: Summarize the exported report.
+      data_from_output: report_rows
+      output_key: summary_text
+
+  - id: write_summary
+    component: file.write_text
+    goal: Write the generated summary to disk.
+    inputs:
+      path: summary.txt
+      text: "{{outputs.summary_text}}"
+      output_key: summary_path
+
+  - id: record_run_log
+    component: system.log
+    goal: Record completion in the structured run log.
+    inputs:
+      message: report_export_and_summary completed
+      payload:
+        summary_path: "{{outputs.summary_path}}"
+edges:
+  - from: open_login_page
+    to: fill_username
+  - from: fill_username
+    to: fill_password
+  - from: fill_password
+    to: submit_login
+  - from: submit_login
+    to: enter_report_page
+  - from: enter_report_page
+    to: fill_start_date
+  - from: fill_start_date
+    to: fill_end_date
+  - from: fill_end_date
+    to: click_export
+  - from: click_export
+    to: wait_export_success
+  - from: wait_export_success
+    to: read_export_data
+  - from: read_export_data
+    to: write_export_csv
+  - from: write_export_csv
+    to: read_export_csv
+  - from: read_export_csv
+    to: generate_summary
+  - from: generate_summary
+    to: write_summary
+  - from: write_summary
+    to: record_run_log

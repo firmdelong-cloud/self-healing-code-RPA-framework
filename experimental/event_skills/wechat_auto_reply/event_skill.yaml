@@ -1,0 +1,42 @@
+id: wechat_auto_reply
+name: WeChat Auto Reply Event Skill
+version: 0.1.0
+type: event_skill
+runtime: desktop_event
+description: Experimental draft-only event Skill for visible desktop WeChat unread messages.
+
+trigger:
+  type: unread_message
+  adapter: wechat
+
+observe:
+  max_contacts: 5
+  read_history_turns: 8
+  require_latest_turn: incoming
+
+decision_policy:
+  allow_group_chat: false
+  skip_if_recently_handled: true
+  skip_if_echo: true
+  require_contact_confidence: 0.85
+  require_direction_confidence: 0.85
+
+reply_policy:
+  mode: draft_only
+  draft_only: true
+  auto_send: false
+  require_human_confirm: true
+
+rate_limit:
+  per_contact_per_hour: 3
+  global_per_hour: 20
+
+safety:
+  block_high_risk_intents: true
+  block_payment: true
+  block_private_sensitive: true
+  require_human_confirm: true
+
+memory:
+  dedupe_window_hours: 24
+  remember_handled_events: true

@@ -1,12 +1,31 @@
-# Self-Healing Code RPA
+# AI RPA Skill Platform
 
-Self-Healing Code RPA is a code-based RPA Skill Runtime for building, running, testing, repairing, and versioning browser automation skills.
+AI RPA Skill Platform is a componentized automation Skill platform for creating, running, observing, repairing, testing, versioning, and rolling back AI-generated RPA Skills.
 
-It is designed around a safe self-healing workflow:
+It preserves the original **Self-Healing Code RPA** MVP as a code-based RPA Skill Runtime, but the main direction is now broader: Codex/AI generates a Skill DSL made of reusable components, and the runtime executes those component graphs with structured observation, local repair, sandbox validation, versioning, and rollback.
 
-1. Generate or create a standardized RPA Skill.
-2. Run the Skill through the runtime.
-3. Capture screenshots, DOM snapshots, URLs, logs, and failed step metadata when execution fails.
+It is not a small RPA demo and not a loose collection of Python scripts. The platform is organized around these responsibilities:
+
+- Codex/AI: generates or repairs Skill DSL from natural-language requirements.
+- Component Core: defines reusable automation components with schemas, risk metadata, and repair scopes.
+- Runtime: executes component flows and records every node input, output, duration, status, and error.
+- Observer: captures screenshots, DOM snapshots, URLs, logs, and failed component context.
+- Repair Engine: creates local repair requests for failed component nodes and validates selector-only patches.
+- Sandbox + Version Manager: tests patches in isolation before applying them and supports rollback.
+- Web Management Layer: planned surface for projects, Skills, components, runs, repairs, AI prompts, knowledge base, and policies.
+
+It supports two Skill models:
+
+- `procedure_skill`: deterministic workflow automation for Web RPA, exports, forms, scraping, and back-office tasks.
+- `event_skill`: event-driven automation for chat, inbox, desktop notification, and other continuous interaction scenarios.
+
+Procedure Skills now support component workflows through `nodes` and `edges`. Legacy `steps` are still supported for compatibility.
+
+Safe repair flow:
+
+1. Generate or create a standardized component-based Skill DSL.
+2. Run the Skill graph through the runtime.
+3. Capture screenshots, DOM snapshots, URLs, logs, and failed component node metadata when execution fails.
 4. Generate a structured `repair_request.json`.
 5. Let Codex or a repair agent propose a selector-only `patch.json`.
 6. Validate the patch with strict safety rules.
@@ -21,7 +40,7 @@ The project does not let AI freely rewrite runtime code. AI can propose repairs,
 
 This project is an experimental MVP.
 
-Current scope: Web RPA Skill runtime plus Desktop Message RPA with Codex-style Skill generation and selector-only patch repair.
+Current scope: component-based Procedure Skill runtime, selector-level self-healing, versioned repair pipeline, and an early Event Skill runtime skeleton for dry-run and draft-only interaction automations.
 
 It is not ready for production use without additional security review, scheduling, authentication, deployment hardening, and environment-specific approval controls.
 
@@ -35,6 +54,7 @@ python -m playwright install chromium
 python -m code_rpa doctor
 python -m code_rpa skill list
 python -m code_rpa skill run web_report_export
+python -m code_rpa skill run report_export_and_summary
 python -m pytest
 ```
 
@@ -46,28 +66,29 @@ python -m pytest
 - Not a protocol-reverse-engineering or hook-based automation stack.
 - Not a multi-instance control, batch marketing, or friend-growth automation tool.
 - Not a hidden runtime that bypasses desktop safety prompts.
-- Not an OCR, scheduling, or real-website integration layer beyond the local examples in this repo.
+- Not a production message bot, OCR platform, scheduler, or real-website integration layer beyond the local examples in this repo.
 
 ## Architecture
 
-- Python Runtime: runs Skill steps, logs step results, captures failure snapshots.
-- Desktop Message Runtime: reads desktop chat state, classifies intent, generates controlled replies, and applies auto-send policy.
-- Skill Registry: loads YAML Skills from `example_skills/`.
-- Repair Agent: generates `repair_request.json`, validates selector-only `patch.json`, and gates repair apply.
+- Component Core: component protocol, registry, context, and runner.
+- Skill Core: shared schema for `procedure_skill` and `event_skill`.
+- Procedure Runtime: runs component graphs for fixed business workflows.
+- Event Runtime: polls events, builds context, applies decisions, chooses draft/confirm/send/skip actions, and records memory.
+- Skill Registry: loads YAML Skill DSL from `example_skills/`.
+- Repair Agent: generates component-node-aware `repair_request.json`, validates selector-only `patch.json`, and gates repair apply.
 - Sandbox: copies the project, applies a patch in isolation, and runs tests.
 - Version Manager: snapshots, creates new versions after passing tests, and rolls back.
-- Desktop Message RPA: mock WeChat fixture plus a best-effort Windows UI Automation adapter for the official client.
+- Experimental Adapters: WeChat desktop vision integration is kept outside the core runtime under `experimental/`.
 
 ## MVP Scope
 
-The MVP is intentionally narrow:
-
-- Web RPA with Playwright.
-- Desktop Message RPA with a mock WeChat window and controlled auto-send policy.
-- `skill.yaml` workflow definitions.
+- Component-based Procedure Skill Web RPA with Playwright.
+- Event Skill runtime skeleton for continuous, stateful automations.
+- `skill.yaml` component workflow DSL with `nodes` and `edges`.
 - `selectors.yaml` primary and fallback selectors.
+- Built-in components: `browser.*`, `file.*`, `excel.*`, `control.*`, `ai.generate_text` mock, `human.approval` mock, and `system.log`.
 - Generic Web steps: `goto`, `click`, `fill`, `select`, `wait_for`, `extract_text`, `extract_table`, `download_file`, `assert_text`, `assert_url`, and `screenshot`.
-- Desktop message steps: `open_window`, `detect_unread`, `click_chat`, `read_chat_text`, `classify_intent`, `generate_reply`, `safety_check`, `auto_send_policy`, `fill_text`, and `send_message`.
+- Desktop mock message steps remain for tests, but real message automation should use the Event Skill model.
 - Structured Skill outputs through `RunResult.outputs`.
 - Skill quality validation with `python -m code_rpa skill validate <skill_id>`.
 - Failure screenshots and DOM snapshots.
@@ -91,28 +112,26 @@ If `python` is not on PATH, use the installed Python executable directly.
 
 ```powershell
 python -m code_rpa skill run web_report_export
+python -m code_rpa skill run report_export_and_summary
 python -m code_rpa desktop simulate wechat_auto_reply_mock
 ```
 
 The web demo uses `tests/fixtures/report_demo.html`, logs in, opens the report page, selects a date range, exports the report, and verifies the success message.
 
-The desktop demo uses `tests/fixtures/wechat_mock.html`, detects an unread chat, reads the latest message, classifies the intent, generates a reply, applies the auto-send policy, and sends only when allowed.
+The complex component demo `report_export_and_summary` exports local report data, writes CSV output, reads it back through the `excel.read` component, generates a deterministic mock AI summary, writes `summary.txt`, and records a structured run log.
 
-You can also run the Skill entrypoints directly:
+The desktop mock demo uses `tests/fixtures/wechat_mock.html`, detects an unread chat, reads the latest message, classifies the intent, generates a deterministic reply, applies the auto-send policy, and sends only when allowed.
 
-```powershell
-python example_skills\web_report_export\main.py
-python example_skills\wechat_auto_reply_mock\main.py
-```
+Example Skills:
 
-Additional example Skills:
-
+- `web_report_export`: original self-healing report export demo.
+- `report_export_and_summary`: component-flow demo for export, file, excel, mock AI summary, and logging.
 - `login_and_export_report`: generic step version of the login/export workflow.
 - `scrape_table_to_csv`: extracts a local HTML table, saves CSV output, and returns `table_rows` plus `csv_path`.
 - `form_submit_workflow`: fills a local form fixture, submits it, and verifies success text.
 - `customer_search_export`: searches customer records, exports the result table to CSV, and returns `csv_path` plus `table_rows`.
-- `wechat_auto_reply_mock`: opens a mock WeChat desktop window, detects unread messages, classifies intent, generates a reply, and auto-sends only when policy allows it.
-- `wechat_auto_reply_live`: attaches to the visible official WeChat desktop client through Windows UI Automation and runs the same controlled reply flow with auto-send off by default.
+- `wechat_auto_reply_mock`: local mock for desktop message runtime primitives.
+- `wechat_auto_reply_live`: experimental visible-client desktop adapter with `auto_send: false` by default.
 
 ## Run Tests
 
@@ -126,7 +145,7 @@ Run only unit tests:
 python -m pytest -m "not integration"
 ```
 
-Run the real Chromium integration test set:
+Run Chromium integration tests:
 
 ```powershell
 python -m pytest -m integration
@@ -137,6 +156,7 @@ python -m pytest -m integration
 ```powershell
 python -m code_rpa skill list
 python -m code_rpa skill run web_report_export
+python -m code_rpa skill run report_export_and_summary
 python -m code_rpa skill run wechat_auto_reply_live
 python -m code_rpa skill test web_report_export
 python -m code_rpa skill create my_new_skill
@@ -159,27 +179,23 @@ python -m code_rpa demo codex-patch
 
 `demo codex-patch` simulates Codex-generated selector repair without calling an LLM API.
 
-`desktop simulate wechat_auto_reply_mock` runs the mock WeChat chat flow and prints a concise JSON summary.
-
-`desktop test wechat_auto_reply_mock` runs the pytest coverage for the desktop message Skill.
-
 ## Repair Pipeline
 
 The repair pipeline is local, selector-only, and test-gated:
 
-1. Run a Skill through the Python runtime.
-2. Capture screenshot, DOM, URL, error logs, and attempted selectors on failure.
+1. Run a component-based Skill through the Python runtime.
+2. Capture screenshot, DOM, URL, error logs, component node inputs/outputs, and attempted selectors on failure.
 3. Generate `repair_request.json`.
 4. Validate a selector-only `patch.json`.
 5. Apply the patch only inside `SandboxRunner`.
-6. Run the patch test command inside the sandbox.
+6. Run the patch `test_command` inside the sandbox.
 7. Apply a new version with `VersionManager` only after tests pass.
 
 Core flow:
 
 ```text
 Skill Run
-  -> Step Failed
+  -> Component Node Failed
   -> Observer captures screenshot / DOM / URL / logs
   -> repair_request.json
   -> Codex proposes selector-only patch.json
@@ -194,12 +210,12 @@ Skill Run
 
 ## repair_request.json
 
-When a step fails after retry and fallback selectors, the runtime captures failure context and writes `storage/repair_requests/<run_id>/repair_request.json`.
+When a component node fails after retry and fallback selectors, the runtime captures failure context and writes `storage/repair_requests/<run_id>/repair_request.json`.
 
 The request includes:
 
 - Skill identity and version.
-- Failed step ID and goal.
+- Failed component node ID, component ID, inputs, selector ref, and goal.
 - Error type and message.
 - Current URL.
 - Screenshot and DOM snapshot paths.
@@ -223,7 +239,7 @@ Required fields include:
 - `changes`
 - `rationale`
 
-Each change must target the failed step's selector in the current Skill's `selectors.yaml`:
+Each change must target the failed step's selector in the current Skill's `selectors.yaml`, for example:
 
 ```text
 example_skills/web_report_export/selectors.yaml
@@ -253,12 +269,14 @@ See `docs/codex-generate-patch.md`.
 
 ## Desktop Message RPA
 
-The repository now includes a Desktop Message RPA runtime aimed at safe chat automation.
+The repository includes an experimental Desktop Message RPA layer for safe chat automation experiments. It is now treated as an Event Skill direction, not as a normal fixed-step Procedure Skill.
 
 - `desktop_runtime/` handles window discovery, unread detection, chat reading, input filling, sending, and screenshot capture on failure.
 - `message_runtime/` handles message parsing, rule-based intent classification, reply generation, safety checks, auto-send policy decisions, and conversation logging.
-- `vision_runtime/` adds screenshot-based region detection plus OCR fallback for Qt-style WeChat windows that expose very little UI Automation structure.
-- `example_skills/wechat_auto_reply_mock/` provides the first end-to-end desktop message Skill.
+- `event_runtime/` models continuous event handling with detection, context, decision, action policy, and memory.
+- `vision_runtime/` adds screenshot-based region detection plus OCR fallback for desktop windows that expose little UI Automation structure.
+- `example_skills/wechat_auto_reply_mock/` remains a local mock used for testing desktop primitives.
+- `experimental/event_skills/wechat_auto_reply/event_skill.yaml` shows the intended draft-only Event Skill declaration.
 
 Example:
 
@@ -271,35 +289,17 @@ Sample output:
 ```json
 {
   "status": "success",
-  "contact_name": "客户A",
-  "latest_message": "你好，多少钱？",
+  "contact_name": "Customer A",
+  "latest_message": "hello, how much is it?",
   "intent": "price_inquiry",
-  "reply_text": "您好，具体价格需要看您选择的产品规格，我可以先发您一份报价参考。",
+  "reply_text": "Hello, the exact price depends on the product specification. I can share a quotation reference first.",
   "auto_send_allowed": true,
   "sent": true,
   "handoff_required": false
 }
 ```
 
-For local development, the repo uses `tests/fixtures/wechat_mock.html`. For live Windows experiments, the desktop runtime also includes a best-effort `desktop_wechat` adapter that targets the visible official WeChat client through UI Automation. It does not use protocol reverse engineering, hook injection, or hidden control paths.
-
-When the official WeChat client exposes too little UI Automation data, the live adapter can fall back to a visual path built on `opencv-python` and `rapidocr-onnxruntime`: it captures only the bound WeChat window, looks for unread badges or the active conversation row, OCRs the chat pane, and pastes replies into the editor through the visible client.
-
-To run the live desktop Skill:
-
-```powershell
-python -m code_rpa skill validate wechat_auto_reply_live
-python -m code_rpa skill run wechat_auto_reply_live
-```
-
-If your WeChat window title differs, set:
-
-```powershell
-$env:WECHAT_WINDOW_TITLE_REGEX = "微信|WeChat"
-python -m code_rpa skill run wechat_auto_reply_live
-```
-
-The live Skill keeps `auto_send: false` by default so you can verify the window binding and draft filling path before enabling unattended sending in a controlled environment.
+For live Windows experiments, `wechat_auto_reply_live` targets only the visible official WeChat client through UI Automation. It does not use protocol reverse engineering, hook injection, or hidden control paths. It keeps `auto_send: false` by default.
 
 ## Auto-Send Policy
 
@@ -415,7 +415,8 @@ It teaches future Codex runs to follow this framework's rules: no LLM calls duri
 
 ## Current Limitations
 
-- Web RPA plus controlled Desktop Message RPA.
+- Procedure Skill Web RPA plus controlled desktop mock primitives.
+- Event Skill runtime is an early skeleton, not a production message agent.
 - Selector-level repair only.
 - No Web UI.
 - No real website integration.
@@ -424,8 +425,7 @@ It teaches future Codex runs to follow this framework's rules: no LLM calls duri
 - No automatic Python code patching.
 - No production scheduler or deployment hardening.
 - The live WeChat desktop adapter is best-effort and environment-specific; repeatable tests still run on the mock fixture.
-- Some Weixin desktop builds expose only a minimal Qt accessibility tree, which can block unread detection and message reading without OCR, injection, or protocol-level access.
-- The vision fallback depends on the WeChat window being visible, foregrounded, and laid out close to the expected desktop proportions.
+- The vision fallback depends on the target window being visible, foregrounded, and laid out close to expected desktop proportions.
 
 ## Safety Boundaries
 
@@ -437,6 +437,7 @@ It teaches future Codex runs to follow this framework's rules: no LLM calls duri
 - High-risk patches are rejected for automatic application.
 - Secrets, passwords, tokens, cookies, and session data must not be written to logs or repair requests.
 - Desktop message automation must not use protocol reverse engineering, hook injection, stealth execution, or bulk marketing behavior.
+- Event Skills for messaging should default to dry-run, draft-only, or human-confirm modes.
 
 ## License
 

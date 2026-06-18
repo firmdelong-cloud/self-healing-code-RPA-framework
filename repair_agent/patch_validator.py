@@ -83,10 +83,10 @@ class PatchValidator:
 
         errors: list[str] = []
 
-        failed_step_id = repair_request.get("failed_step_id")
+        failed_step_id = repair_request.get("failed_component_node_id") or repair_request.get("failed_step_id")
         allowed_scope = repair_request.get("allowed_repair_scope", {})
         expected_selector_refs = set(allowed_scope.get("allowed_selector_refs", []) or [])
-        expected_failed_step_id = allowed_scope.get("failed_step_id")
+        expected_failed_step_id = allowed_scope.get("failed_component_node_id") or allowed_scope.get("failed_step_id")
         expected_allowed_files = set(allowed_scope.get("allowed_files", []) or [])
         expected_skill_name = repair_request.get("skill_name")
         expected_skill_id = repair_request.get("skill_id")
@@ -118,12 +118,13 @@ class PatchValidator:
             if current_skill.version != patch.get("base_version"):
                 errors.append("patch base_version does not match the current skill version")
 
-        if patch.get("target_step_id") != failed_step_id:
+        patch_target_id = patch.get("target_component_node_id") or patch.get("target_node_id") or patch.get("target_step_id")
+        if patch_target_id != failed_step_id:
             errors.append(
-                f"patch target_step_id must be '{failed_step_id}', got '{patch.get('target_step_id')}'"
+                f"patch target_step_id must be '{failed_step_id}', got '{patch_target_id}'"
             )
 
-        if patch.get("target_step_id") != expected_failed_step_id:
+        if patch_target_id != expected_failed_step_id:
             errors.append("patch target_step_id must match allowed_repair_scope.failed_step_id")
 
         if repair_risk == "high" or patch_risk == "high":
@@ -201,7 +202,7 @@ class PatchValidator:
             "skill_id": patch["skill_id"],
             "skill_name": repair_request.get("skill_name"),
             "base_version": repair_request.get("skill_version"),
-            "target_step_id": patch["failed_step_id"],
+            "target_step_id": patch.get("failed_component_node_id", patch["failed_step_id"]),
             "code_changes": None,
             "reason": patch.get("rationale", ""),
             "risk_level": str(patch.get("risk_level", "low")).lower(),
@@ -290,7 +291,6 @@ class PatchValidator:
     ) -> None:
         required_values = {
             "scope_type": "selector_only",
-            "failed_step_id": repair_scope.get("failed_step_id"),
             "must_not_touch_other_steps": True,
             "must_not_touch_runtime": True,
         }
@@ -308,6 +308,11 @@ class PatchValidator:
         if patch_refs != repair_refs:
             errors.append("allowed_repair_scope.allowed_selector_refs must match repair_request")
 
+        expected_node_id = repair_scope.get("failed_component_node_id") or repair_scope.get("failed_step_id")
+        patch_node_id = patch_scope.get("failed_component_node_id") or patch_scope.get("failed_step_id")
+        if patch_node_id != expected_node_id:
+            errors.append("allowed_repair_scope.failed_step_id must match repair_request")
+
     def _validate_codex_style_patch(
         self,
         repair_request: dict[str, Any],
@@ -317,7 +322,7 @@ class PatchValidator:
     ) -> PatchValidationResult:
         errors: list[str] = []
         expected_skill_id = repair_request.get("skill_id")
-        expected_failed_step_id = repair_request.get("failed_step_id")
+        expected_failed_step_id = repair_request.get("failed_component_node_id") or repair_request.get("failed_step_id")
         expected_repair_request_id = repair_request.get("repair_request_id") or repair_request.get("run_id")
         allowed_scope = repair_request.get("allowed_repair_scope", {}) or {}
         expected_allowed_files = set(allowed_scope.get("allowed_files", []) or [])
@@ -332,7 +337,8 @@ class PatchValidator:
             errors.append("repair_request_id must match repair_request.run_id")
         if patch.get("skill_id") != expected_skill_id:
             errors.append("skill_id must match repair_request.skill_id")
-        if patch.get("failed_step_id") != expected_failed_step_id:
+        patch_failed_id = patch.get("failed_component_node_id") or patch.get("failed_step_id")
+        if patch_failed_id != expected_failed_step_id:
             errors.append("failed_step_id must match repair_request.failed_step_id")
         if patch.get("scope") != "selector_only":
             errors.append("scope must be selector_only")

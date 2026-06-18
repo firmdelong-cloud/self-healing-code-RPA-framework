@@ -19,18 +19,61 @@ class IntentResult:
 class IntentClassifier:
     """Classify common customer-service intents without calling an LLM."""
 
+    REFUND_KEYWORDS = {
+        "refund",
+        "return money",
+        "cancel order",
+        "after-sale",
+    }
+    LEGAL_KEYWORDS = {
+        "legal",
+        "lawyer",
+        "lawsuit",
+        "contract dispute",
+    }
+    PAYMENT_KEYWORDS = {
+        "payment",
+        "pay",
+        "bank card",
+        "transfer",
+        "account number",
+    }
+    COMPLAINT_KEYWORDS = {
+        "complaint",
+        "bad review",
+        "not satisfied",
+        "angry",
+    }
+    PRICE_KEYWORDS = {
+        "price",
+        "quote",
+        "quotation",
+        "cost",
+        "how much",
+    }
+    GREETING_KEYWORDS = {
+        "hello",
+        "hi",
+        "hey",
+        "good morning",
+        "good afternoon",
+    }
+
     def classify(self, message: str) -> IntentResult:
         text = str(message or "").strip().lower()
-        if any(token in text for token in ("退款", "退钱", "refund", "售后")):
+        if self._contains_any(text, self.REFUND_KEYWORDS):
             return IntentResult("refund_dispute", "high", ["refund_keyword"])
-        if any(token in text for token in ("法务", "律师", "起诉", "legal", "合同纠纷")):
+        if self._contains_any(text, self.LEGAL_KEYWORDS):
             return IntentResult("legal_issue", "high", ["legal_keyword"])
-        if any(token in text for token in ("付款", "转账", "银行卡", "pay", "payment", "打款")):
+        if self._contains_any(text, self.PAYMENT_KEYWORDS):
             return IntentResult("payment_sensitive", "high", ["payment_keyword"])
-        if any(token in text for token in ("投诉", "差评", "不满意", "complaint")):
+        if self._contains_any(text, self.COMPLAINT_KEYWORDS):
             return IntentResult("complaint", "high", ["complaint_keyword"])
-        if any(token in text for token in ("多少钱", "价格", "报价", "price", "cost")):
+        if self._contains_any(text, self.PRICE_KEYWORDS):
             return IntentResult("price_inquiry", "low", ["price_keyword"])
-        if any(token in text for token in ("你好", "您好", "hello", "hi")):
+        if self._contains_any(text, self.GREETING_KEYWORDS):
             return IntentResult("greeting", "low", ["greeting_keyword"])
         return IntentResult("general_inquiry", "medium", ["default_rule"])
+
+    def _contains_any(self, text: str, keywords: set[str]) -> bool:
+        return any(keyword in text for keyword in keywords)

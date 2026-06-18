@@ -1,6 +1,9 @@
+skill_id: web_report_export
 id: web_report_export
 name: Web Report Export
 version: 0.2.0
+type: procedure_skill
+runtime: web
 description: Log in to a local report page, select a date range, export a report, and verify success.
 entrypoint: main.py
 selectors: selectors.yaml
@@ -12,48 +15,86 @@ inputs:
   password:
     type: string
     default: demo_password
+variables:
+  report_demo_url: "{{REPORT_DEMO_URL}}"
 outputs: {}
-steps:
+policies:
+  high_risk_requires_human: true
+tests:
+  - tests/test_runtime.py
+nodes:
   - id: open_login_page
-    type: navigate
+    component: browser.goto
     goal: Open the local report system login page.
-    url: "{{REPORT_DEMO_URL}}"
+    inputs:
+      url: "{{REPORT_DEMO_URL}}"
 
-  - id: login
-    type: login
-    goal: Enter demo credentials and submit the login form.
-    selector_refs:
-      username: username_input
-      password: password_input
-      submit: login_submit_button
-    username_value: demo_user
-    password_value: demo_password
-    target_description: Login form with username, password, and submit button.
+  - id: fill_username
+    component: browser.fill
+    goal: Fill the demo username.
+    inputs:
+      selector_ref: username_input
+      value: demo_user
+
+  - id: fill_password
+    component: browser.fill
+    goal: Fill the demo password.
+    inputs:
+      selector_ref: password_input
+      value: demo_password
+
+  - id: submit_login
+    component: browser.click
+    goal: Submit the login form.
+    inputs:
+      selector_ref: login_submit_button
 
   - id: enter_report_page
-    type: click
+    component: browser.click
     goal: Enter the report page from the dashboard.
-    selector_ref: report_page_link
-    target_description: Navigation link that opens the report export page.
+    inputs:
+      selector_ref: report_page_link
 
-  - id: select_date_range
-    type: select_date_range
-    goal: Select the date range for the report export.
-    selector_refs:
-      start_date: date_start_input
-      end_date: date_end_input
-    start_date: "2026-06-01"
-    end_date: "2026-06-17"
-    target_description: Start and end date inputs used to filter report data.
+  - id: fill_start_date
+    component: browser.fill
+    goal: Fill the report start date.
+    inputs:
+      selector_ref: date_start_input
+      value: "2026-06-01"
+
+  - id: fill_end_date
+    component: browser.fill
+    goal: Fill the report end date.
+    inputs:
+      selector_ref: date_end_input
+      value: "2026-06-17"
 
   - id: click_export
-    type: click
+    component: browser.click
     goal: Click the export button to generate the report.
-    selector_ref: export_button
     target_description: Button that starts report generation.
+    inputs:
+      selector_ref: export_button
 
   - id: verify_export_success
-    type: wait_for_selector
+    component: browser.wait_for_selector
     goal: Confirm that the export finished successfully.
-    selector_ref: export_success_message
-    target_description: Success message or download area shown after export is generated.
+    inputs:
+      selector_ref: export_success_message
+edges:
+  - from: open_login_page
+    to: fill_username
+  - from: fill_username
+    to: fill_password
+  - from: fill_password
+    to: submit_login
+  - from: submit_login
+    to: enter_report_page
+  - from: enter_report_page
+    to: fill_start_date
+  - from: fill_start_date
+    to: fill_end_date
+  - from: fill_end_date
+    to: click_export
+  - from: click_export
+    to: verify_export_success

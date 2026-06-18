@@ -9,6 +9,8 @@ import re
 
 import yaml
 
+from skill_core.skill_schema import SkillKind, SkillSchemaError, normalize_skill_kind
+
 
 @dataclass(frozen=True)
 class SkillValidationResult:
@@ -24,8 +26,10 @@ class SkillValidationResult:
 class SkillValidator:
     """Validate a Skill against the repository contract without running it."""
 
-    REQUIRED_SKILL_FIELDS = {"id", "name", "version", "description", "inputs", "steps"}
+    REQUIRED_SKILL_FIELDS = {"name", "version", "description", "inputs"}
+    ALLOWED_SKILL_TYPES = {kind.value for kind in SkillKind}
     REQUIRED_STEP_FIELDS = {"id", "type", "goal"}
+    REQUIRED_NODE_FIELDS = {"id", "component", "goal"}
     SELECTOR_REF_REQUIRED_TYPES = {
         "click",
         "fill",
@@ -72,6 +76,7 @@ class SkillValidator:
         if skill_yaml:
             self._validate_skill_yaml(skill_id, skill_yaml, errors)
             self._validate_steps(skill_yaml, selectors_yaml, errors)
+            self._validate_nodes(skill_yaml, selectors_yaml, errors)
             self._validate_fixtures(skill_id, skill_yaml, errors)
 
         if selectors_yaml:
@@ -84,12 +89,22 @@ class SkillValidator:
         return self._result(skill_id, errors, warnings)
 
     def _validate_skill_yaml(self, skill_id: str, data: dict[str, Any], errors: list[str]) -> None:
+        try:
+            skill_type = normalize_skill_kind(data.get("type"))
+        except SkillSchemaError as error:
+            errors.append(str(error))
+            skill_type = SkillKind.PROCEDURE
+
+        if skill_type != SkillKind.PROCEDURE:
+            errors.append("example_skills currently accepts only type: procedure_skill")
+
         missing = sorted(field for field in self.REQUIRED_SKILL_FIELDS if field not in data)
         if missing:
             errors.append(f"skill.yaml is missing required fields: {missing}")
 
-        if data.get("id") != skill_id:
-            errors.append(f"skill.yaml id must match directory name '{skill_id}'")
+        declared_skill_id = data.get("skill_id", data.get("id"))
+        if declared_skill_id != skill_id:
+            errors.append(f"skill.yaml skill_id/id must match directory name '{skill_id}'")
 
         if "inputs" in data and not isinstance(data.get("inputs"), dict):
             errors.append("skill.yaml inputs must be a mapping")
@@ -97,8 +112,16 @@ class SkillValidator:
         if "outputs" in data and not isinstance(data.get("outputs"), dict):
             errors.append("skill.yaml outputs must be a mapping")
 
-        if not isinstance(data.get("steps"), list) or not data.get("steps"):
-            errors.append("skill.yaml steps must be a non-empty list")
+        has_steps = isinstance(data.get("steps"), list) and bool(data.get("steps"))
+        has_nodes = isinstance(data.get("nodes"), list) and bool(data.get("nodes"))
+        if not has_steps and not has_nodes:
+            errors.append("skill.yaml must define non-empty nodes or legacy steps")
+        if "variables" in data and not isinstance(data.get("variables"), dict):
+            errors.append("skill.yaml variables must be a mapping")
+        if "policies" in data and not isinstance(data.get("policies"), dict):
+            errors.append("skill.yaml policies must be a mapping")
+        if "edges" in data and not isinstance(data.get("edges"), list):
+            errors.append("skill.yaml edges must be a list")
 
         runtime = str(data.get("runtime", "web"))
         if runtime.startswith("desktop") and runtime != "desktop_mock":
@@ -146,6 +169,51 @@ class SkillValidator:
                     continue
                 for role, selector_ref in selector_refs_map.items():
                     self._validate_selector_ref(step_id, selector_ref, selector_refs, errors, role=str(role))
+
+    def _validate_nodes(
+        self,
+        skill_yaml: dict[str, Any],
+        selectors: dict[str, Any],
+        errors: list[str],
+    ) -> None:
+        nodes = skill_yaml.get("nodes")
+        if not isinstance(nodes, list) or not nodes:
+            return
+
+        selector_refs = set(selectors.keys()) if isinstance(selectors, dict) else set()
+        seen_node_ids: set[str] = set()
+        for index, node in enumerate(nodes):
+            if not isinstance(node, dict):
+                errors.append(f"node[{index}] must be a mapping")
+                continue
+
+            node_id = str(node.get("id", f"node[{index}]"))
+            missing = sorted(field for field in self.REQUIRED_NODE_FIELDS if field not in node)
+            if missing:
+                errors.append(f"node '{node_id}' is missing required fields: {missing}")
+
+            if node_id in seen_node_ids:
+                errors.append(f"duplicate node id: {node_id}")
+            seen_node_ids.add(node_id)
+
+            inputs = node.get("inputs", {}) or {}
+            if not isinstance(inputs, dict):
+                errors.append(f"node '{node_id}' inputs must be a mapping")
+                continue
+
+            component_id = str(node.get("component", ""))
+            if component_id.startswith("browser.") and inputs.get("selector_ref"):
+                self._validate_selector_ref(node_id, inputs.get("selector_ref"), selector_refs, errors)
+
+        edge_ids = seen_node_ids
+        for index, edge in enumerate(skill_yaml.get("edges", []) or []):
+            if not isinstance(edge, dict):
+                errors.append(f"edge[{index}] must be a mapping")
+                continue
+            if edge.get("from") not in edge_ids:
+                errors.append(f"edge[{index}].from references missing node '{edge.get('from')}'")
+            if edge.get("to") not in edge_ids:
+                errors.append(f"edge[{index}].to references missing node '{edge.get('to')}'")
 
     def _validate_selector_ref(
         self,
@@ -208,6 +276,7 @@ class SkillValidator:
     def _validate_fixtures(self, skill_id: str, skill_yaml: dict[str, Any], errors: list[str]) -> None:
         runtime = str(skill_yaml.get("runtime", "web"))
         expected_fixture_names = self._fixture_names_from_steps(skill_yaml.get("steps", []))
+        expected_fixture_names.update(self._fixture_names_from_nodes(skill_yaml.get("nodes", [])))
         if runtime.startswith("desktop") and runtime != "desktop_mock" and not expected_fixture_names:
             return
         if not expected_fixture_names:
@@ -228,6 +297,31 @@ class SkillValidator:
             if not isinstance(step, dict):
                 continue
             raw_url = step.get("url")
+            if not isinstance(raw_url, str):
+                continue
+            if raw_url.startswith("file:") and raw_url.endswith(".html"):
+                fixture_names.add(Path(raw_url).name)
+                continue
+            if raw_url.endswith(".html"):
+                fixture_names.add(Path(raw_url).name)
+                continue
+            match = self.PLACEHOLDER_PATTERN.match(raw_url)
+            if match:
+                fixture_names.add(self._fixture_name_from_placeholder(match.group(1)))
+        return fixture_names
+
+    def _fixture_names_from_nodes(self, nodes: Any) -> set[str]:
+        fixture_names: set[str] = set()
+        if not isinstance(nodes, list):
+            return fixture_names
+
+        for node in nodes:
+            if not isinstance(node, dict):
+                continue
+            inputs = node.get("inputs", {}) or {}
+            if not isinstance(inputs, dict):
+                continue
+            raw_url = inputs.get("url")
             if not isinstance(raw_url, str):
                 continue
             if raw_url.startswith("file:") and raw_url.endswith(".html"):

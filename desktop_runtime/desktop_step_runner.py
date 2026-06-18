@@ -251,7 +251,7 @@ class DesktopMessageExecutor:
             runtime=skill.runtime,
             page=page,
             browser=self.browser,
-            window_title_regex=str(skill.raw.get("desktop", {}).get("window_title_regex", "微信|WeChat")),
+            window_title_regex=str(skill.raw.get("desktop", {}).get("window_title_regex", "WeChat|微信")),
         )
         outputs: dict[str, Any] = {}
         steps: list[StepResult] = []

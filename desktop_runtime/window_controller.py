@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 import re
 from typing import Any
 
@@ -68,7 +67,7 @@ class MockDesktopWindow:
         self.page.click(selector)
         self._wait_small()
         status = self.page.text_content(self.SEND_STATUS_SELECTOR) or ""
-        return "sent" in status.lower() or "已发送" in status
+        return "sent" in status.lower()
 
     def screenshot(self, path: str) -> None:
         self.page.screenshot(path=path, full_page=True)
@@ -122,7 +121,12 @@ class MockDesktopWindow:
 
 
 class LiveWechatWindow:
-    """Best-effort Windows UI Automation adapter for the official desktop client."""
+    """Experimental Windows UI Automation adapter for the official desktop client.
+
+    This adapter stays outside the stable Procedure Skill repair model. It is a
+    best-effort desktop boundary that should be used only with explicit user
+    control and conservative policies.
+    """
 
     def __init__(self, window: Any):
         self.window = window
@@ -194,7 +198,7 @@ class LiveWechatWindow:
 
     def send_message(self, selector: str) -> bool:
         try:
-            button = self.window.child_window(title_re="发送|Send", control_type="Button")
+            button = self.window.child_window(title_re="Send|发送", control_type="Button")
             if button.exists():
                 button.click_input()
                 return True
@@ -227,12 +231,14 @@ class LiveWechatWindow:
             match = re.search(r"(\d+)$", text)
             if match:
                 contact_name = text[: match.start()].strip(" ()")
-                candidates.append({
-                    "contact_name": contact_name or text,
-                    "unread_count": int(match.group(1)),
-                    "is_group_chat": "群" in text,
-                    "_element": item,
-                })
+                candidates.append(
+                    {
+                        "contact_name": contact_name or text,
+                        "unread_count": int(match.group(1)),
+                        "is_group_chat": "group" in text.lower() or "群" in text,
+                        "_element": item,
+                    }
+                )
         if candidates:
             return candidates[0]
         return None

@@ -1,6 +1,8 @@
-id: customer_search_export
+﻿id: customer_search_export
 name: Customer Search Export
 version: 0.1.0
+
+type: procedure_skill
 description: Search local customer records, extract the result table, and export the data to CSV.
 entrypoint: main.py
 selectors: selectors.yaml

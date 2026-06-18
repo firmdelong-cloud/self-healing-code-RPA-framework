@@ -1,14 +1,24 @@
 # Skill Contract
 
-This document defines the minimum contract for a Self-Healing Code RPA Skill.
+This document defines the minimum contract for Automation Skill Engine Skills.
 
-## skill.yaml Required Fields
+## Skill Types
 
-Every Skill must provide:
+Every Skill should declare one of these types:
+
+- `type: procedure_skill`: fixed workflow automation with ordered steps.
+- `type: event_skill`: event-driven automation with trigger, context, decision, safety, action, and memory policies.
+
+Old `skill.yaml` files without `type` are treated as `procedure_skill` for compatibility.
+
+## Procedure skill.yaml Required Fields
+
+Every Procedure Skill must provide:
 
 - `id`: stable lowercase Skill ID, matching the directory name.
 - `name`: human-readable Skill name.
 - `version`: semantic version string, for example `0.1.0`.
+- `type`: `procedure_skill`.
 - `description`: short purpose statement.
 - `entrypoint`: Python entrypoint, normally `main.py`.
 - `selectors`: selector file path, normally `selectors.yaml`.
@@ -16,6 +26,23 @@ Every Skill must provide:
 - `inputs`: structured input definitions. Use defaults for local demos only.
 - `outputs`: structured output definitions.
 - `steps`: ordered workflow steps.
+
+## Event event_skill.yaml Required Fields
+
+Every Event Skill must provide:
+
+- `id`: stable lowercase Skill ID.
+- `name`: human-readable Skill name.
+- `version`: semantic version string.
+- `type`: `event_skill`.
+- `runtime`: event runtime, for example `desktop_event`.
+- `trigger`: event source and trigger type.
+- `observe`: event observation limits and evidence requirements.
+- `decision_policy`: rules for deciding whether an event should be handled.
+- `reply_policy`: action mode such as `draft_only`, `confirm`, or controlled send.
+- `rate_limit`: per-subject and global rate limits.
+- `safety`: high-risk action boundaries.
+- `memory`: dedupe and state retention rules.
 
 ## inputs Format
 

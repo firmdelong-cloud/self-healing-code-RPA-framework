@@ -18,9 +18,12 @@ def test_demo_skill_entrypoint_runs_against_local_html(tmp_path):
     assert result.status == "success"
     assert [step.step_id for step in result.steps] == [
         "open_login_page",
-        "login",
+        "fill_username",
+        "fill_password",
+        "submit_login",
         "enter_report_page",
-        "select_date_range",
+        "fill_start_date",
+        "fill_end_date",
         "click_export",
         "verify_export_success",
     ]

@@ -1,6 +1,8 @@
-id: form_submit_workflow
+﻿id: form_submit_workflow
 name: Form Submit Workflow
 version: 0.1.0
+
+type: procedure_skill
 description: Fill a local form fixture, submit it, and verify the success message.
 entrypoint: main.py
 selectors: selectors.yaml

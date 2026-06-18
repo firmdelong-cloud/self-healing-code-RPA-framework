@@ -1,12 +1,12 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <title>WeChat Mock</title>
     <style>
       body {
         margin: 0;
-        font-family: "Microsoft YaHei", sans-serif;
+        font-family: Arial, sans-serif;
         background: #f3f5f7;
       }
       .wechat-shell {
@@ -120,7 +120,7 @@
   <body>
     <div class="wechat-shell">
       <aside class="sidebar">
-        <h1>微信 Mock</h1>
+        <h1>WeChat Mock</h1>
         <div id="contact-list"></div>
       </aside>
       <main class="chat-area">
@@ -131,9 +131,9 @@
           <div id="chat-history"></div>
         </section>
         <section class="composer">
-          <textarea id="reply-box" placeholder="请输入消息"></textarea>
+          <textarea id="reply-box" placeholder="Type a message"></textarea>
           <div class="composer-actions">
-            <button id="send-button" type="button">发送</button>
+            <button id="send-button" type="button">Send</button>
           </div>
           <div id="send-status"></div>
         </section>
@@ -146,19 +146,19 @@
         price: {
           contacts: [
             {
-              name: "客户A",
+              name: "Customer A",
               unreadCount: 1,
               isGroup: false,
               messages: [
-                { direction: "incoming", text: "你好，多少钱？" }
+                { direction: "incoming", text: "hello, how much is it?" }
               ]
             },
             {
-              name: "客户群",
+              name: "Customer Group",
               unreadCount: 0,
               isGroup: true,
               messages: [
-                { direction: "incoming", text: "大家下午好" }
+                { direction: "incoming", text: "good afternoon everyone" }
               ]
             }
           ]
@@ -166,11 +166,11 @@
         refund: {
           contacts: [
             {
-              name: "客户A",
+              name: "Customer A",
               unreadCount: 1,
               isGroup: false,
               messages: [
-                { direction: "incoming", text: "我要退款，尽快处理" }
+                { direction: "incoming", text: "I want a refund, please handle it soon" }
               ]
             }
           ]
@@ -178,11 +178,11 @@
         group: {
           contacts: [
             {
-              name: "售前交流群",
+              name: "Sales Group",
               unreadCount: 1,
               isGroup: true,
               messages: [
-                { direction: "incoming", text: "张三: 多少钱？" }
+                { direction: "incoming", text: "Alice: how much is it?" }
               ]
             }
           ]
@@ -206,13 +206,20 @@
         contactList.innerHTML = "";
         state.contacts.forEach((contact, index) => {
           const item = document.createElement("div");
-          item.className = "contact-item" + (index === state.activeIndex ? " active" : "") + (contact.unreadCount > 0 ? " unread" : "");
+          item.className =
+            "contact-item" +
+            (index === state.activeIndex ? " active" : "") +
+            (contact.unreadCount > 0 ? " unread" : "");
           item.dataset.contactName = contact.name;
           item.dataset.unreadCount = String(contact.unreadCount);
           item.dataset.isGroup = String(contact.isGroup);
           item.innerHTML = `
             <span class="contact-name">${contact.name}</span>
-            ${contact.unreadCount > 0 ? `<span class="unread-badge">${contact.unreadCount}</span>` : `<span class="unread-badge" style="visibility:hidden">0</span>`}
+            ${
+              contact.unreadCount > 0
+                ? `<span class="unread-badge">${contact.unreadCount}</span>`
+                : `<span class="unread-badge" style="visibility:hidden">0</span>`
+            }
           `;
           item.addEventListener("click", () => {
             state.activeIndex = index;

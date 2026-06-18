@@ -1,6 +1,8 @@
-id: login_and_export_report
+﻿id: login_and_export_report
 name: Login And Export Report
 version: 0.1.0
+
+type: procedure_skill
 description: Log in to a local report fixture, select a date range, export a report, and verify success.
 entrypoint: main.py
 selectors: selectors.yaml

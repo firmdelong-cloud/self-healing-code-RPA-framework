@@ -1,6 +1,8 @@
-id: wechat_auto_reply_mock
+﻿id: wechat_auto_reply_mock
 name: WeChat Auto Reply Mock
 version: 0.1.0
+
+type: procedure_skill
 runtime: desktop_mock
 description: Detect unread chat messages in a mock WeChat window, generate a safe reply, and auto-send only when policy allows it.
 entrypoint: main.py

@@ -28,6 +28,9 @@ class StepResult:
     selector_source: str | None = None
     attempted_selectors: list[str] | None = None
     outputs: dict[str, Any] = field(default_factory=dict)
+    inputs: dict[str, Any] = field(default_factory=dict)
+    component_id: str | None = None
+    node_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

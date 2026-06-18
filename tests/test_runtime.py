@@ -78,11 +78,15 @@ def test_skill_can_be_loaded():
 
     assert skill.id == "web_report_export"
     assert skill.version == "0.2.0"
-    assert [step["id"] for step in skill.steps] == [
+    assert skill.steps == []
+    assert [node["id"] for node in skill.nodes] == [
         "open_login_page",
-        "login",
+        "fill_username",
+        "fill_password",
+        "submit_login",
         "enter_report_page",
-        "select_date_range",
+        "fill_start_date",
+        "fill_end_date",
         "click_export",
         "verify_export_success",
     ]
@@ -96,7 +100,7 @@ def test_executor_runs_login_report_export_flow(tmp_path):
     result = RPAExecutor(storage_root=tmp_path).run(skill, page=page)
 
     assert result.status == "success"
-    assert [step.status for step in result.steps] == ["success"] * 6
+    assert [step.status for step in result.steps] == ["success"] * 9
     assert page.filled == [
         ("#username", "demo_user"),
         ("#password", "demo_password"),
@@ -116,6 +120,7 @@ def test_click_export_primary_selector_fails_and_fallback_succeeds(tmp_path):
 
     click_export = next(step for step in result.steps if step.step_id == "click_export")
     assert result.status == "success"
+    assert click_export.step_type == "browser.click"
     assert click_export.selector_used == "button[data-testid='export-button']"
     assert click_export.selector_source == "fallback"
     assert click_export.attempted_selectors == [

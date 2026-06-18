@@ -43,6 +43,8 @@ class RepairRequestGenerator:
             "skill_id": skill.id,
             "skill_name": skill.name,
             "skill_version": skill.version,
+            "failed_component_node_id": failed_step.get("id"),
+            "failed_component_node": self._failed_component_node(failed_step),
             "failed_step_id": failed_step.get("id"),
             "failed_step_goal": failed_step.get("goal"),
             "error_type": self._error_type(step_result.error),
@@ -74,6 +76,7 @@ class RepairRequestGenerator:
     def _allowed_repair_scope(self, skill: Any, failed_step: dict[str, Any], selector_ref: str | None) -> dict[str, Any]:
         return {
             "scope_type": "selector_only",
+            "failed_component_node_id": failed_step.get("id"),
             "failed_step_id": failed_step.get("id"),
             "allowed_files": self._allowed_files(skill),
             "allowed_selector_refs": [selector_ref] if selector_ref else [],
@@ -112,18 +115,30 @@ class RepairRequestGenerator:
     def _recent_success_snapshot_path(self, skill: Any, failed_step: dict[str, Any]) -> str | None:
         return failed_step.get("recent_success_snapshot_path") or getattr(skill, "recent_success_snapshot_path", None)
 
+    def _failed_component_node(self, failed_step: dict[str, Any]) -> dict[str, Any]:
+        return self._redact(
+            {
+                "node_id": failed_step.get("id"),
+                "component_id": failed_step.get("component", failed_step.get("type")),
+                "goal": failed_step.get("goal"),
+                "inputs": failed_step.get("inputs", {}),
+                "selector_ref": failed_step.get("selector_ref"),
+                "repair_scope": "selector_only" if failed_step.get("selector_ref") else "manual_review",
+            }
+        )
+
     def _risk_level(self, failed_step: dict[str, Any]) -> str:
         if failed_step.get("risk_level"):
             return str(failed_step["risk_level"])
         if failed_step.get("requires_human_confirmation"):
             return "high"
-        step_type = str(failed_step.get("type", "")).lower()
+        step_type = str(failed_step.get("component", failed_step.get("type", ""))).lower()
         step_id = str(failed_step.get("id", "")).lower()
         goal = str(failed_step.get("goal", "")).lower()
         risky_words = ("delete", "payment", "pay", "approve", "submit", "publish", "permission")
         if any(word in step_id or word in goal for word in risky_words):
             return "high"
-        if step_type in {"click", "fill", "login", "select_date_range"}:
+        if step_type in {"click", "fill", "login", "select_date_range", "browser.click", "browser.fill"}:
             return "medium"
         return "low"
 

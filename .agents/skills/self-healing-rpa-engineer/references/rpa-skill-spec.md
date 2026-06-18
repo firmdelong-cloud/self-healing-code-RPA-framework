@@ -1,6 +1,8 @@
-# RPA Skill Spec
+# Procedure Skill Spec
 
-Each Skill lives under `example_skills/<skill_id>/`.
+Each fixed workflow Procedure Skill lives under `example_skills/<skill_id>/`.
+
+Use this spec for Web RPA, exports, form submission, scraping, and other deterministic workflows. Do not use this fixed-step spec for chat or inbox-style message automation; use Event Skill architecture instead.
 
 Required files:
 
@@ -16,6 +18,7 @@ Required files:
 - `id`
 - `name`
 - `version`
+- `type: procedure_skill`
 - `description`
 - `entrypoint`
 - `selectors`

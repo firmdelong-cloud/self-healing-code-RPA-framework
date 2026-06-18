@@ -23,7 +23,7 @@ class AppFinder:
         runtime: str,
         page: Any | None = None,
         browser: PlaywrightBrowser | None = None,
-        window_title_regex: str = "微信|WeChat",
+        window_title_regex: str = "WeChat|微信",
     ) -> DesktopSession:
         if page is not None:
             if hasattr(page, "detect_unread") and hasattr(page, "click_chat"):

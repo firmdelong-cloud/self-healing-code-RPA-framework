@@ -2,19 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
+import re
 from typing import Any
-
-
-@dataclass(frozen=True)
-class ConversationEvent:
-    event_type: str
-    contact_name: str
-    payload: dict[str, Any]
-    ts: str
 
 
 class ConversationLogger:
@@ -45,6 +37,42 @@ class ConversationLogger:
     def count_sent_total(self, *, within_hours: int) -> int:
         return sum(1 for event in self._recent_events(within_hours=within_hours) if event["event_type"] == "message_sent")
 
+    def looks_like_recent_reply_echo(self, contact_name: str, message_text: str, *, within_hours: int = 24) -> bool:
+        normalized_message = self._normalize_text(message_text)
+        if len(normalized_message) < 6:
+            return False
+
+        for event in self._recent_events(within_hours=within_hours):
+            if event["contact_name"] != contact_name:
+                continue
+            reply_text = str(event.get("payload", {}).get("reply_text", "")).strip()
+            normalized_reply = self._normalize_text(reply_text)
+            if len(normalized_reply) < 6:
+                continue
+            if normalized_message == normalized_reply:
+                return True
+            if normalized_message.startswith(normalized_reply) or normalized_reply.startswith(normalized_message):
+                return True
+        return False
+
+    def was_recent_message_handled(self, contact_name: str, message_text: str, *, within_hours: int = 24) -> bool:
+        normalized_message = self._normalize_text(message_text)
+        if len(normalized_message) < 6:
+            return False
+
+        for event in self._recent_events(within_hours=within_hours):
+            if event["contact_name"] != contact_name:
+                continue
+            prior_message = str(event.get("payload", {}).get("latest_message", "")).strip()
+            normalized_prior = self._normalize_text(prior_message)
+            if len(normalized_prior) < 6:
+                continue
+            if normalized_message == normalized_prior:
+                return True
+            if normalized_message.startswith(normalized_prior) or normalized_prior.startswith(normalized_message):
+                return True
+        return False
+
     def _recent_events(self, *, within_hours: int) -> list[dict[str, Any]]:
         if not self.path.exists():
             return []
@@ -58,3 +86,7 @@ class ConversationLogger:
             if ts >= cutoff:
                 events.append(event)
         return events
+
+    def _normalize_text(self, text: str) -> str:
+        collapsed = re.sub(r"\s+", "", str(text or "").strip()).lower()
+        return re.sub(r"[,.!?:;\"'`~\[\]\(\)<>]", "", collapsed)

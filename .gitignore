@@ -22,6 +22,8 @@ storage/snapshots/*
 storage/repair_requests/*
 storage/versions/*
 storage/outputs/*
+storage/live_probe/*
+storage/live_monitor/*
 
 # Keep storage folders
 !storage/runs/.gitkeep
@@ -44,3 +46,6 @@ Thumbs.db
 # Logs
 *.log
 *.jsonl
+
+# Local live desktop probes
+tools/wechat_pre_send_monitor.py
